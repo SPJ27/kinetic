@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { githubUrl, projectName } = await request.json();
+  const { githubUrl, projectName, port } = await request.json();
 
   if (typeof githubUrl !== "string" ) {
     return NextResponse.json(
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
   const job = await deploymentQueue.add(
     "deploy-from-github",
-    { githubUrl, projectName },
+    { githubUrl, projectName, port },
     {
       attempts: 2,
       backoff: {

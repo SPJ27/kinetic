@@ -75,7 +75,7 @@ const worker = new Worker(
     async (job) => {
         if (job.name !== "deploy-from-github") return;
 
-        const { githubUrl, projectName } = job.data;
+        const { githubUrl, projectName, port } = job.data;
 
         const url = new URL(githubUrl);
 
@@ -96,8 +96,7 @@ const worker = new Worker(
                 "./applications"
             );
         } catch (error: any) {
-            console.error(`Failed to clone repository: ${error.message}`);
-            throw error;
+            
         }
 
         console.log("Repository cloned successfully!");
@@ -142,7 +141,7 @@ const worker = new Worker(
         console.log(`Running Docker container from image: ${imageName}...`);
 
         const containerName = `container-${deploymentId}`;
-        const port = 3001;
+
         try {
             await runCommand(
                 "docker",
