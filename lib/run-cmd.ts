@@ -1,4 +1,3 @@
-
 import { spawn } from "node:child_process";
 import { db } from "@/db/index";
 import { logs } from "@/db/schema/logs";
@@ -9,20 +8,31 @@ type RunCommandResult = {
 
 type LogType = "stdout" | "stderr";
 
+type CommandEnv = Record<string, string | undefined>;
+
 const BATCH_SIZE = 20;
+const MIN_REDACT_LENGTH = 4;
 
 export function runCommand(
   command: string,
   args: string[],
   cwd: string,
-  detached = false
+  detached = false,
+  env: CommandEnv = {},
+  redact: string[] = []
 ): Promise<RunCommandResult> {
   return new Promise((resolve, reject) => {
+    const childEnv: CommandEnv = {
+      ...env,
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+    };
+
     const child = spawn(command, args, {
       cwd,
       detached,
       stdio: detached ? "ignore" : ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env: childEnv as unknown as NodeJS.ProcessEnv,
     });
 
     if (detached) {
@@ -33,6 +43,12 @@ export function runCommand(
       });
       return;
     }
+
+    const secrets = redact
+      .filter((s) => s.length >= MIN_REDACT_LENGTH)
+      .sort((a, b) => b.length - a.length);
+    const scrub = (text: string) =>
+      secrets.reduce((out, secret) => out.split(secret).join("***"), text);
 
     let pendingLogs: { output: string; type: LogType }[] = [];
     let writeChain = Promise.resolve();
@@ -64,13 +80,13 @@ export function runCommand(
     }
 
     child.stdout?.on("data", (data: Buffer) => {
-      const output = data.toString();
+      const output = scrub(data.toString());
       process.stdout.write(`[stdout] ${output}`);
       addLog(output, "stdout");
     });
 
     child.stderr?.on("data", (data: Buffer) => {
-      const output = data.toString();
+      const output = scrub(data.toString());
       process.stderr.write(`[stderr] ${output}`);
       addLog(output, "stderr");
     });
@@ -90,19 +106,13 @@ export function runCommand(
         settled = true;
 
         if (logWriteFailed) {
-          console.warn(
-            "Some logs could not be saved to the database."
-          );
+          console.warn("Some logs could not be saved to the database.");
         }
 
         if (code === 0) {
           resolve({});
         } else {
-          reject(
-            new Error(
-              `Command failed: exit code ${code}, signal ${signal}`
-            )
-          );
+          reject(new Error(`Command failed: exit code ${code}, signal ${signal}`));
         }
       });
     });
