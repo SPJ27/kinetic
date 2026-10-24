@@ -1,31 +1,48 @@
+
 import { spawn } from "node:child_process";
+
+type RunCommandResult = {
+  pid?: number;
+};
 
 export function runCommand(
   command: string,
   args: string[],
-  cwd: string
-): Promise<void> {
+  cwd: string,
+  detached = false
+): Promise<RunCommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      detached,
+      stdio: detached
+        ? "ignore"
+        : ["ignore", "pipe", "pipe"],
+      env: process.env,
     });
 
-    child.stdout.on("data", (data: Buffer) => {
+    child.once("error", reject);
+
+    if (detached) {
+      child.once("spawn", () => {
+        child.unref();
+        resolve({ pid: child.pid });
+      });
+
+      return;
+    }
+
+    child.stdout?.on("data", (data: Buffer) => {
       process.stdout.write(`[stdout] ${data.toString()}`);
     });
 
-    child.stderr.on("data", (data: Buffer) => {
+    child.stderr?.on("data", (data: Buffer) => {
       process.stderr.write(`[stderr] ${data.toString()}`);
     });
 
-    child.on("error", (error) => {
-      reject(error);
-    });
-
-    child.on("close", (code, signal) => {
+    child.once("close", (code, signal) => {
       if (code === 0) {
-        resolve();
+        resolve({});
       } else {
         reject(
           new Error(
