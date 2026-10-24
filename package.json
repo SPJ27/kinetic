@@ -9,15 +9,26 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@neondatabase/neon-js": "^0.9.0-beta",
+    "@neondatabase/serverless": "^1.2.0",
+    "better-auth": "^1.7.12",
+    "bullmq": "^6.4.1",
+    "dotenv": "^18.0.9",
+    "drizzle-orm": "^0.45.4",
+    "ioredis": "^6.0.0",
     "next": "16.4.3",
+    "pg": "^8.23.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
