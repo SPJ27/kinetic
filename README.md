@@ -7,3 +7,4 @@ docker run -d \
   -p 6379:6379 \
   redis:7
 3. start the worker via tsm workers/deployments.worker.ts
+4. for caddy docker 
