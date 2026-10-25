@@ -1,6 +1,7 @@
 npm install
 
-npm run dev
+npm run build
+npm start
 
 docker run -d \
   --name bullmq-redis \
