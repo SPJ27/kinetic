@@ -6,6 +6,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import { db } from "@/db";
+import { projects } from "@/db/schema/projects";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -75,146 +77,161 @@ Dockerfile*
 `;
 
 function validateGithubUrl(raw: unknown): string {
-  const invalid = new Error("Invalid GitHub repository URL");
-  if (typeof raw !== "string") throw invalid;
+    const invalid = new Error("Invalid GitHub repository URL");
+    if (typeof raw !== "string") throw invalid;
 
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw invalid;
-  }
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch {
+        throw invalid;
+    }
 
-  if (
-    url.protocol !== "https:" ||
-    url.hostname !== "github.com" ||
-    url.port ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)
-  ) {
-    throw invalid;
-  }
+    if (
+        url.protocol !== "https:" ||
+        url.hostname !== "github.com" ||
+        url.port ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash ||
+        !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)
+    ) {
+        throw invalid;
+    }
 
-  return url.href;
+    return url.href;
 }
 
 function validateProjectName(raw: unknown): string {
-  if (typeof raw !== "string" || !PROJECT_NAME_RE.test(raw)) {
-    throw new Error("Invalid project name");
-  }
-  return raw;
-}
-
-function validatePort(raw: unknown): number {
-  const port = Number(raw);
-  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
-    throw new Error(`Port must be an integer between ${MIN_PORT} and ${MAX_PORT}`);
-  }
-  return port;
+    if (typeof raw !== "string" || !PROJECT_NAME_RE.test(raw)) {
+        throw new Error("Invalid project name");
+    }
+    return raw;
 }
 
 const worker = new Worker(
-  "deployments",
-  async (job) => {
-    if (job.name !== "deploy-from-github") return;
+    "deployments",
+    async (job) => {
+        if (job.name !== "deploy-from-github") return;
 
-    const githubUrl = validateGithubUrl(job.data.githubUrl);
-    const projectName = validateProjectName(job.data.projectName);
-    const port = validatePort(job.data.port);
-    const envVars = parseUserEnv(job.data.env);
-    const secretValues = envVars.map(([, value]) => value);
+        const githubUrl = validateGithubUrl(job.data.githubUrl);
+        const projectName = validateProjectName(job.data.projectName);
+        const envVars = parseUserEnv(job.data.env);
+        const secretValues = envVars.map(([, value]) => value);
 
-    const repoPath = path.resolve(APPS_DIR, projectName);
-    if (path.dirname(repoPath) !== APPS_DIR) {
-      throw new Error("Invalid project name");
-    }
+        const repoPath = path.resolve(APPS_DIR, projectName);
+        if (path.dirname(repoPath) !== APPS_DIR) {
+            throw new Error("Invalid project name");
+        }
 
-    const deploymentId = crypto.randomUUID();
-    const imageName = `deployment-${deploymentId}`;
-    const containerName = `container-${deploymentId}`;
+        const deploymentId = crypto.randomUUID();
+        const imageName = `deployment-${deploymentId}`;
+        const containerName = `container-${deploymentId}`;
 
-    const envDir = await mkdtemp(path.join(os.tmpdir(), "deploy-env-"));
-    const runtimeEnvPath = path.join(envDir, "runtime.env");
-    const buildEnvPath = path.join(envDir, "build.env");
+        const [created] = await db.insert(projects).values({
+            name: projectName,
+            githubUrl: githubUrl,
+            dockerDeploymentId: deploymentId,
+        }).returning()
 
-    try {
-      console.log(`Starting clone: ${githubUrl}`);
-      await runCommand(
-        "git",
-        ["clone", "--depth", "1", "--progress", "--", githubUrl, projectName],
-        APPS_DIR,
-        false,
-        { GIT_TERMINAL_PROMPT: "0" }
-      );
-      console.log("Repository cloned successfully!");
+        const projectId = created.id;
+        const port = typeof created.port === "number" ? created.port : parseInt(created.port, 10);
 
-      console.log("Creating Dockerfile and .dockerignore...");
-      await writeFile(path.join(repoPath, "Dockerfile"), dockerFile);
-      await writeFile(path.join(repoPath, ".dockerignore"), dockerIgnore);
+        const envDir = await mkdtemp(path.join(os.tmpdir(), "deploy-env-"));
+        const runtimeEnvPath = path.join(envDir, "runtime.env");
+        const buildEnvPath = path.join(envDir, "build.env");
 
-      await writeFile(runtimeEnvPath, toDockerEnvFile(envVars), { mode: 0o600 });
-      await writeFile(buildEnvPath, toShellEnvFile(envVars), { mode: 0o600 });
+        const redact = [
+            ...secretValues,
+            imageName,
+            containerName,
+            deploymentId,
+            envDir,
+            APPS_DIR,
+            process.cwd(),
+        ];
 
-      console.log(`Building Docker image: ${imageName}...`);
-      await runCommand(
-        "docker",
-        ["build", "--secret", `id=build_env,src=${buildEnvPath}`, "-t", imageName, "."],
-        repoPath,
-        false,
-        { DOCKER_BUILDKIT: "1" },
-        secretValues
-      );
-      console.log(`Docker image ${imageName} built successfully!`);
+        const run = (
+            command: string,
+            args: string[],
+            cwd: string,
+            env: Record<string, string | undefined> = {}
+        ) => runCommand(command, args, { cwd, projectId, env, redact });
 
-      console.log(`Running Docker container from image: ${imageName}...`);
-      await runCommand(
-        "docker",
-        [
-          "run",
-          "-d",
-          "--name", containerName,
-          "--restart", "unless-stopped",
-          "--env-file", runtimeEnvPath,
-          "-e", "NODE_ENV=production",
-          "-e", "PORT=3000",
-          "-e", "HOSTNAME=0.0.0.0",
-          "--memory", MEMORY_LIMIT,
-          "--cpus", CPU_LIMIT,
-          "--pids-limit", PIDS_LIMIT,
-          "--cap-drop", "ALL",
-          "--security-opt", "no-new-privileges",
-          "-p", `127.0.0.1:${port}:3000`,
-          imageName,
-        ],
-        repoPath,
-        false,
-        {},
-        secretValues
-      );
+        try {
+            console.log(`[${projectId}] Cloning repository`);
+            await run(
+                "git",
+                ["clone", "--depth", "1", "--progress", "--", githubUrl, projectName],
+                APPS_DIR,
+                { GIT_TERMINAL_PROMPT: "0" }
+            );
 
-      console.log(`Docker container from image ${imageName} is running successfully!`);
-    } finally {
-      await rm(envDir, { recursive: true, force: true });
-    }
+            await writeFile(path.join(repoPath, "Dockerfile"), dockerFile);
+            await writeFile(path.join(repoPath, ".dockerignore"), dockerIgnore);
+            await writeFile(runtimeEnvPath, toDockerEnvFile(envVars), { mode: 0o600 });
+            await writeFile(buildEnvPath, toShellEnvFile(envVars), { mode: 0o600 });
 
-    return { success: true, githubUrl };
-  },
-  {
-    connection: {
-      host: process.env.REDIS_HOST ?? "127.0.0.1",
-      port: Number(process.env.REDIS_PORT ?? 6379),
-      maxRetriesPerRequest: null,
+            console.log(`[${projectId}] Building image`);
+            await run(
+                "docker",
+                [
+                    "build",
+                    "--progress=plain",
+                    "--secret", `id=build_env,src=${buildEnvPath}`,
+                    "-t", imageName,
+                    ".",
+                ],
+                repoPath,
+                { DOCKER_BUILDKIT: "1" }
+            );
+
+            console.log(`[${projectId}] Starting container`);
+            await run(
+                "docker",
+                [
+                    "run",
+                    "-d",
+                    "--name", containerName,
+                    "--restart", "unless-stopped",
+                    "--env-file", runtimeEnvPath,
+                    "-e", "NODE_ENV=production",
+                    "-e", "PORT=3000",
+                    "-e", "HOSTNAME=0.0.0.0",
+                    "--memory", MEMORY_LIMIT,
+                    "--cpus", CPU_LIMIT,
+                    "--pids-limit", PIDS_LIMIT,
+                    "--cap-drop", "ALL",
+                    "--security-opt", "no-new-privileges",
+                    "--log-opt", "max-size=10m",
+                    "--log-opt", "max-file=3",
+                    "-p", `127.0.0.1:${port}:3000`,
+                    imageName,
+                ],
+                repoPath
+            );
+
+            console.log(`[${projectId}] Deployment is running`);
+        } finally {
+            await rm(envDir, { recursive: true, force: true });
+        }
+
+        return { success: true, githubUrl };
     },
-  }
+    {
+        connection: {
+            host: process.env.REDIS_HOST ?? "127.0.0.1",
+            port: Number(process.env.REDIS_PORT ?? 6379),
+            maxRetriesPerRequest: null,
+        },
+    }
 );
 
 worker.on("completed", (job) => {
-  console.log(`Job ${job.id} completed successfully.\n------------------`);
+    console.log(`Job ${job.id} completed successfully.\n------------------`);
 });
 
 worker.on("failed", (job, err) => {
-  console.error(`Job ${job?.id} failed with error: ${err.message}`);
+    console.error(`Job ${job?.id} failed with error: ${err.message}`);
 });

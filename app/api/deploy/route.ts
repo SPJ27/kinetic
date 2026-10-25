@@ -1,10 +1,12 @@
+import { db } from "@/db";
+import { projects } from "@/db/schema/projects";
 import { deploymentQueue } from "@/queue/deployments.queue";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { githubUrl, projectName, port, env } = await request.json();
+  const { githubUrl, projectName, env } = await request.json();
 
   if (typeof githubUrl !== "string" ) {
     return NextResponse.json(
@@ -12,10 +14,25 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  const url = new URL(githubUrl);
+  if (url.hostname !== "github.com") {
+    return NextResponse.json(
+      { error: "Valid GitHub URL required" },
+      { status: 400 }
+    );
+  }
+  
+  if (typeof projectName !== "string" || !/^[a-zA-Z0-9_-]+$/.test(projectName)) {
+    return NextResponse.json(
+      { error: "Valid project name required" },
+      { status: 400 }
+    );
+  }
+
 
   const job = await deploymentQueue.add(
     "deploy-from-github",
-    { githubUrl, projectName, port, env },
+    { githubUrl, projectName, env },
     {
       attempts: 2,
       backoff: {
