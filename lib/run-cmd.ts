@@ -1,6 +1,6 @@
 
 import { spawn } from "node:child_process";
-import { db } from "@/db/index";
+import { workerDb as db } from "@/db/worker";
 import { logs } from "@/db/schema/logs";
 
 export type LogStage =
