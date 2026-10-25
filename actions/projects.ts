@@ -1,6 +1,9 @@
 'use server'
 
+import { db } from "@/db";
+import { projects } from "@/db/schema/projects";
 import { deploymentQueue } from "@/queue/deployments.queue";
+import { redirect } from "next/navigation";
 
 export async function createProject(formData: FormData) {
     const projectName = formData.get("projectName") as string;
@@ -20,17 +23,28 @@ export async function createProject(formData: FormData) {
         throw new Error("Valid project name required");
     }
 
+    const deploymentId = crypto.randomUUID();
+    const imageName = `deployment-${deploymentId}`;
+    const containerName = `container-${deploymentId}`;
+
+    const [created] = await db.insert(projects).values({
+        name: projectName,
+        githubUrl: githubUrl,
+        dockerDeploymentId: deploymentId,
+    }).returning()
+
     const job = await deploymentQueue.add(
         "deploy-from-github",
-        { githubUrl, projectName ,env},
+        { githubUrl, projectName, env, deploymentId, imageName, containerName, created },
         {
-          attempts: 2,
-          backoff: {
-            type: "exponential",
-            delay: 1000,
-          },
-          removeOnComplete: 100,
-          removeOnFail: 500,
+            attempts: 2,
+            backoff: {
+                type: "exponential",
+                delay: 1000,
+            },
+            removeOnComplete: 100,
+            removeOnFail: 500,
         }
-      );
+    );
+    redirect(`/projects/${created.id}`);
 }

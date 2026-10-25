@@ -10,4 +10,5 @@ export const logs = pgTable("logs", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  logType: text("log_type").notNull(),
 });
