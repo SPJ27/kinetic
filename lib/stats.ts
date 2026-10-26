@@ -1,6 +1,12 @@
 import { runCommand } from "./run-cmd"
 
 export const getStats = async (projectId: string) => {
+
+    // get userId
+    // run docker cmd
+    // find all projects created by user
+    // filter the docker processes by the container name
+    // calc
     const res = await runCommand("docker", ["stats", "--no-stream", "--format", "{{json .}}"], {cwd: process.cwd(), projectId, stage: "stats", captureOutput: true } )
     const json = res.stdout?.split("\n").filter(line => line.trim() !== "").map(line => JSON.parse(line)) || []
     

@@ -11,4 +11,10 @@ const db = drizzle(new Pool({ connectionString: process.env.DATABASE_URL }), {
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   baseURL: "http://localhost:3000/",
+  socialProviders: {
+        github: { 
+            clientId: process.env.GITHUB_CLIENT_ID as string, 
+            clientSecret: process.env.GITHUB_CLIENT_SECRET as string, 
+        }, 
+    },
 });
