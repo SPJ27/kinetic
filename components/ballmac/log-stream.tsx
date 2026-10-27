@@ -10,15 +10,10 @@ import { useMessages } from "@/lib/ballmac/i18n"
 type LogLevel = "debug" | "info" | "warn" | "error"
 
 type LogLine = {
-  /** Unique, stable id for the line. */
   id: string | number
-  /** When it happened: an ISO string or epoch milliseconds. Shown as HH:MM:SS.mmm in UTC. */
   time: string | number
-  /** Severity. */
   level: LogLevel
-  /** The message. */
   message: string
-  /** Where it came from, such as "api" or "worker-2". */
   source?: string
 }
 
@@ -63,23 +58,14 @@ function Highlight({ text, query }: { text: string; query: string }) {
 }
 
 type LogStreamProps = Omit<React.ComponentProps<"div">, "title"> & {
-  /** All lines so far, oldest first. Append to this array as the stream delivers. */
   lines: LogLine[]
-  /** Heading in the toolbar. */
   title?: string
-  /** Most lines kept on screen; older ones are dropped from view. */
   maxLines?: number
-  /** Stick to the newest line while at the bottom. */
   follow?: boolean
-  /** Height of the log area. */
   height?: string
-  /** Wrap long messages instead of scrolling sideways. */
   wrap?: boolean
-  /** Hide the source column. */
   hideSource?: boolean
-  /** Adds a Clear button that calls this. */
   onClear?: () => void
-  /** Shown when there are no lines yet. */
   emptyText?: string
 }
 

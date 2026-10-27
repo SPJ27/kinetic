@@ -40,6 +40,8 @@ const projectName = githubUrl
         dockerDeploymentId: deploymentId,
     }).returning()
 
+    
+
     const job = await deploymentQueue.add(
         "deploy-from-github",
         { githubUrl, projectName, env, deploymentId, imageName, containerName, created },

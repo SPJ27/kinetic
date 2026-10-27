@@ -9,6 +9,9 @@ import {
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { db } from "@/db";
+import { deployments } from "@/db/schema/deployments";
+import { eq } from "drizzle-orm";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -140,29 +143,37 @@ const worker = new Worker(
         }
 
         const githubUrl = validateGithubUrl(job.data.githubUrl);
-        const projectName = validateProjectName(job.data.projectName);
         const envVars = parseUserEnv(job.data.env);
         const secretValues = envVars.map(([, value]) => value);
 
         const { deploymentId, imageName, containerName, created } = job.data;
+        const projectId = created.id;
 
         if (
             typeof imageName !== "string" ||
             typeof containerName !== "string" ||
-            typeof deploymentId !== "string" ||
+            typeof projectId !== "string" ||
             !created ||
             typeof created.id !== "string"
         ) {
             throw new Error("Invalid deployment data");
         }
+       
+        const [deployment] = await db
+            .insert(deployments)
+            .values({
+                projectId,
+                dockerDeploymentId: deploymentId,
+                status: "building",
+            })
+            .returning()
 
-        const projectId = created.id;
-        const port = validatePort(created.port);
-        const repoPath = path.resolve(APPS_DIR, projectName);
-
-        if (path.dirname(repoPath) !== APPS_DIR) {
-            throw new Error("Invalid project name");
+        if (!deployment) {
+            throw new Error("Failed to create deployment record")
         }
+        console.log(`Created deployment record with ID: ${deployment.id}`)
+        const port = validatePort(deployment.port)
+        const repoPath = path.resolve(APPS_DIR, deploymentId);
 
         const envDir = await mkdtemp(
             path.join(os.tmpdir(), "deploy-env-")
@@ -206,7 +217,7 @@ const worker = new Worker(
                     "--progress",
                     "--",
                     githubUrl,
-                    projectName,
+                    deploymentId,
                 ],
                 APPS_DIR,
                 "deploy",
@@ -290,6 +301,15 @@ const worker = new Worker(
                 "deploy"
             );
 
+            await db
+                .update(deployments)
+                .set({ status: "running" })
+                .where(eq(deployments.id, deployment.id))
+                .execute();
+
+            console.log(
+                `Deployment ${deployment.id} is now running on port ${port}`
+            );
             return {
                 success: true,
                 githubUrl,
