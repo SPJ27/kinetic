@@ -6,9 +6,16 @@ import { deploymentQueue } from "@/queue/deployments.queue";
 import { redirect } from "next/navigation";
 
 export async function createProject(formData: FormData) {
-    const projectName = formData.get("projectName") as string;
     const githubUrl = formData.get("githubUrl") as string;
     const env = formData.get("env") as object || {};
+
+
+const projectName = githubUrl
+  .replace(/\/+$/, '')
+  .split('/')
+  .pop()
+  ?.replace(/\.git$/, '')
+
 
     if (!projectName || !githubUrl) {
         throw new Error("Project name and GitHub URL are required");

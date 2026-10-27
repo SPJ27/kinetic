@@ -1,6 +1,6 @@
 import RealtimeProviders from "@/components/realtime-provider"
 import "./globals.css"
-import { Instrument_Serif, Share_Tech } from "next/font/google"
+import { Instrument_Serif } from "next/font/google"
 
 
 const instrumentSerif = Instrument_Serif({ subsets: ["latin"], weight: "400" })

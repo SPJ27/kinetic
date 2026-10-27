@@ -1,5 +1,5 @@
 1. add a nice ui for logs
-2. add github auth
+2. cron jobs for monitoring
 3. add protection under github auth
 4. link projects to users
 5. create a basic dash -> show their usage stats, as well as latest projs
