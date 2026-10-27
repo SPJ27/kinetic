@@ -25,6 +25,6 @@ export default async function Page({
     .orderBy(asc(logs.createdAt))
 
   const sealedQuery = await realtime.seal({ query })
-
+    console.log("sealedQuery", sealedQuery)
   return <ProjectLogs sealedQuery={sealedQuery} />
 }
