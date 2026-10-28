@@ -56,7 +56,7 @@ const worker = new Worker(
 
         console.log('Removing project directory');
         const projectDir = path.resolve(process.cwd(), "applications", deployment.id)
-
+        console.log(`Project directory: ${projectDir}`);
         await rm(projectDir, { recursive: true, force: true });
         console.log('Project directory removed successfully');
 

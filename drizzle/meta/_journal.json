@@ -8,6 +8,13 @@
       "when": 1792887182384,
       "tag": "0000_familiar_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793151192426,
+      "tag": "0001_fixed_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

@@ -2,10 +2,16 @@
 
 import { db } from "@/db";
 import { projects } from "@/db/schema/projects";
+import { auth } from "@/lib/auth/auth";
 import { deploymentQueue } from "@/queue/deployments.queue";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export async function createProject(formData: FormData) {
+    const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return 
+
+
     const githubUrl = formData.get("githubUrl") as string;
     const env = formData.get("env") as object || {};
 
@@ -44,7 +50,7 @@ const projectName = githubUrl
 
     const job = await deploymentQueue.add(
         "deploy-from-github",
-        { githubUrl, projectName, env, deploymentId, imageName, containerName, created },
+        { githubUrl, projectName, env, deploymentId, imageName, containerName, projectId: created.id, redeploy: false },
         {
             attempts: 1,
             backoff: {

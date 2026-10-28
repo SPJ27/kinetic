@@ -11,7 +11,9 @@ import os from "node:os";
 import path from "node:path";
 import { db } from "@/db";
 import { deployments } from "@/db/schema/deployments";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
+import { projects } from "@/db/schema/projects";
+import { pruneQueue } from "@/queue/prune.queue";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -146,15 +148,12 @@ const worker = new Worker(
         const envVars = parseUserEnv(job.data.env);
         const secretValues = envVars.map(([, value]) => value);
 
-        const { deploymentId, imageName, containerName, created } = job.data;
-        const projectId = created.id;
-
+        const {projectId, deploymentId, imageName, containerName, redeploy } = job.data;
+        console.log(projectId, deploymentId, imageName, containerName)
         if (
             typeof imageName !== "string" ||
             typeof containerName !== "string" ||
-            typeof projectId !== "string" ||
-            !created ||
-            typeof created.id !== "string"
+            typeof projectId !== "string"
         ) {
             throw new Error("Invalid deployment data");
         }
@@ -338,6 +337,45 @@ worker.on("completed", async (job, result) => {
                 .where(eq(deployments.id, result?.deploymentRowId))
                 .execute();
 
+
+                /*
+                if it is a redploy event, 
+                then if the task is succeeded
+                prune the old deployments
+                and in project table, change the docker container id to the new ones and the port to that of new deployment
+                */
+        if (job.data.redeploy) {
+            const { projectId, imageName, containerName } = job.data;
+            const deploymentId = result?.deploymentId;
+            const project = await db.query.projects.findFirst({
+                where: and(eq(projects.id, projectId)),
+                with: {
+                    deployments: {
+                        orderBy: (deployment) => desc(deployment.createdAt),
+                     
+                    },
+                },
+            });
+
+
+            console.log(`Project ${projectId} found: ${project?.name}`);
+            if (!project) {
+                console.error(`Project ${projectId} not found`);
+                return;
+            }
+
+
+            for (const deployment of project.deployments) {
+            console.log(`Deployment ${deployment.id} found: ${imageName}, ${containerName}`);
+
+                if (deployment.dockerDeploymentId !== deploymentId && deployment.status === "active") {
+                    console.log(`Pruning old deployment ${deployment.dockerDeploymentId} for project ${project.name}`);
+                    await pruneQueue.add("prune-deployment", { deploymentId: deployment.id });
+                }
+            }
+
+            await db.update(projects).set({ dockerDeploymentId: deploymentId, port: result?.port }).where(eq(projects.id, projectId)).execute();
+        }
     console.log(`Deployment Job ${job.id} completed successfully.\n------------------`);
 });
 
@@ -351,5 +389,7 @@ worker.on("failed", (job, err) => {
         .catch((updateErr) => {
             console.error(`Failed to update deployment status for Job ${job?.id}: ${updateErr.message}`);
         });
+
+    // if redeploy, dont do anything
     console.error(`Deployment Job ${job?.id} failed with error: ${err.message}`);
 });

@@ -6,6 +6,6 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   githubUrl: text("github_url").notNull(),
   dockerDeploymentId: text("docker_deployment_id"),
-  
+  port: integer("port").notNull().default(4000),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
