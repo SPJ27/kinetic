@@ -7,7 +7,7 @@ export const getStats = async (projectId: string) => {
     // find all projects created by user
     // filter the docker processes by the container name
     // calc
-    const res = await runCommand("docker", ["stats", "--no-stream", "--format", "{{json .}}"], {cwd: process.cwd(), projectId, stage: "stats", captureOutput: true } )
+    const res = await runCommand("docker", ["stats", "--no-stream", "--format", "{{json .}}"], {cwd: process.cwd(), projectId, stage: "stats", captureOutput: true, writeLogs: false } )
     const json = res.stdout?.split("\n").filter(line => line.trim() !== "").map(line => JSON.parse(line)) || []
     
     const totalCpuUsage = json.reduce((acc, curr) => {

@@ -10,7 +10,9 @@ export type LogStage =
   | "stats"
   | "install"
   | "test"
-  | "healthcheck";
+  | "healthcheck"
+  | "prune"
+  ;
 
 type LogStream = "stdout" | "stderr";
 
@@ -32,6 +34,7 @@ type RunCommandOptions = {
   redact?: Redaction[];
   timeoutMs?: number;
   captureOutput?: boolean;
+  writeLogs?: boolean;
 };
 
 type PendingLog = {
@@ -72,6 +75,7 @@ export function runCommand(
     redact = [],
     timeoutMs = DEFAULT_TIMEOUT_MS,
     captureOutput = false,
+    writeLogs = true,
   }: RunCommandOptions
 ): Promise<RunCommandResult> {
   return new Promise((resolve, reject) => {
@@ -141,6 +145,7 @@ export function runCommand(
     const capturedStderr: string[] = [];
 
     function flushLogs() {
+        if (!writeLogs) return
       if (pendingLogs.length === 0) return;
 
       const batch = pendingLogs;

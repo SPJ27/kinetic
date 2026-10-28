@@ -301,17 +301,12 @@ const worker = new Worker(
                 "deploy"
             );
 
-            await db
-                .update(deployments)
-                .set({ status: "running" })
-                .where(eq(deployments.id, deployment.id))
-                .execute();
-
             console.log(
                 `Deployment ${deployment.id} is now running on port ${port}`
             );
             return {
                 success: true,
+                deploymentRowId: deployment.id,
                 githubUrl,
                 projectId,
                 deploymentId,
@@ -335,10 +330,26 @@ const worker = new Worker(
     }
 );
 
-worker.on("completed", (job) => {
-    console.log(`Job ${job.id} completed successfully.\n------------------`);
+worker.on("completed", async (job, result) => {
+
+            await db
+                .update(deployments)
+                .set({ status: "active" })
+                .where(eq(deployments.id, result?.deploymentRowId))
+                .execute();
+
+    console.log(`Deployment Job ${job.id} completed successfully.\n------------------`);
 });
 
 worker.on("failed", (job, err) => {
-    console.error(`Job ${job?.id} failed with error: ${err.message}`);
+    db.update(deployments).set({ status: "failed" })
+        .where(eq(deployments.dockerDeploymentId, job?.data.deploymentId))
+        .execute()
+        .then(() => {
+            console.error(`Deployment Job ${job?.id} failed with error: ${err.message}`);
+        })
+        .catch((updateErr) => {
+            console.error(`Failed to update deployment status for Job ${job?.id}: ${updateErr.message}`);
+        });
+    console.error(`Deployment Job ${job?.id} failed with error: ${err.message}`);
 });

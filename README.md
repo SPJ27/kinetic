@@ -8,3 +8,9 @@ docker run -d \
   redis:7
 3. start the worker via tsm workers/deployments.worker.ts
 4. for caddy docker 
+
+
+for redployment
+- create a new docker container, on a new port
+- if it is healthy, prune the old container (NOTE: add a new job in the prune queue only if the new container is healthy)
+- set previous deployment status to stopped

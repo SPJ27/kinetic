@@ -46,7 +46,7 @@ const projectName = githubUrl
         "deploy-from-github",
         { githubUrl, projectName, env, deploymentId, imageName, containerName, created },
         {
-            attempts: 2,
+            attempts: 1,
             backoff: {
                 type: "exponential",
                 delay: 1000,
