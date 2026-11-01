@@ -55,7 +55,10 @@ const worker = new Worker(
         console.log('Image removed successfully');
 
         console.log('Removing project directory');
-        const projectDir = path.resolve(process.cwd(), "applications", deployment.id)
+        if (!deployment?.dockerDeploymentId) {
+            throw new Error(`Docker deployment ID not found for deployment ${deploymentId}`);
+        }
+        const projectDir = path.resolve(process.cwd(), "applications", deployment?.dockerDeploymentId);
         console.log(`Project directory: ${projectDir}`);
         await rm(projectDir, { recursive: true, force: true });
         console.log('Project directory removed successfully');

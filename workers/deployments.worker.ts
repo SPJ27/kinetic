@@ -333,10 +333,17 @@ worker.on("completed", async (job, result) => {
 
             await db
                 .update(deployments)
-                .set({ status: "active" })
+                .set({ status: "active", finishedAt: new Date() })
                 .where(eq(deployments.id, result?.deploymentRowId))
                 .execute();
 
+            await db
+            .update(projects)
+            .set({ dockerDeploymentId: result?.deploymentId, port: result?.port })
+            .where(eq(projects.id, result?.projectId))
+            .execute();
+
+        console.log(`Deployment Job ${job.id} completed successfully.\n------------------`);
 
                 /*
                 if it is a redploy event, 
@@ -344,6 +351,7 @@ worker.on("completed", async (job, result) => {
                 prune the old deployments
                 and in project table, change the docker container id to the new ones and the port to that of new deployment
                 */
+               
         if (job.data.redeploy) {
             const { projectId, imageName, containerName } = job.data;
             const deploymentId = result?.deploymentId;
@@ -376,11 +384,10 @@ worker.on("completed", async (job, result) => {
 
             await db.update(projects).set({ dockerDeploymentId: deploymentId, port: result?.port }).where(eq(projects.id, projectId)).execute();
         }
-    console.log(`Deployment Job ${job.id} completed successfully.\n------------------`);
 });
 
 worker.on("failed", (job, err) => {
-    db.update(deployments).set({ status: "failed" })
+    db.update(deployments).set({ status: "failed", finishedAt: new Date() })
         .where(eq(deployments.dockerDeploymentId, job?.data.deploymentId))
         .execute()
         .then(() => {

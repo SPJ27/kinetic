@@ -7,6 +7,8 @@ import { logs } from "./logs"
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+    projects: many(projects),
+
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -23,7 +25,12 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }))
 
-export const projectsRelations = relations(projects, ({ many }) => ({
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  user: one(user, {
+    fields: [projects.userId],
+    references: [user.id],
+  }),
   logs: many(logs),
   deployments: many(deployments),
 }))

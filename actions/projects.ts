@@ -44,6 +44,7 @@ const projectName = githubUrl
         name: projectName,
         githubUrl: githubUrl,
         dockerDeploymentId: deploymentId,
+        userId: session.user.id,
     }).returning()
 
     
