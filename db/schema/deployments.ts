@@ -1,6 +1,7 @@
-import { pgTable, text, timestamp, integer, index } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, integer, index, boolean } from "drizzle-orm/pg-core"
 import { randomUUID } from "node:crypto"
 import { projects } from "./projects"
+import { is } from "drizzle-orm"
 
 export const deployments = pgTable(
   "deployments",

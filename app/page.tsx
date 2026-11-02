@@ -10,7 +10,7 @@ const page = () => {
   if (isPending) {
     return <div className="p-6 text-sm text-neutral-500">Loading...</div>
   }
-
+  console.log(session)
   if (!session) {
     return (
       <div className="flex min-h-screen items-center justify-center">

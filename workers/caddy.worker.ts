@@ -9,7 +9,7 @@ const worker = new Worker(
         if (job.name === "mount-caddy") {
             const caddyLocation = '/etc/caddy/Caddyfile'
             const caddyFile = await generateCaddyFile()
-            await runCommand("sudo", ["tee", "/etc/caddy/Caddyfile"], {cwd: process.cwd(), projectId: "na", stage: "deploy", captureOutput: true, writeLogs: false, stdin: caddyFile});
+            await runCommand("sudo", ["tee", caddyLocation], {cwd: process.cwd(), projectId: "na", stage: "deploy", captureOutput: true, writeLogs: false, stdin: caddyFile});
             await runCommand("sudo", ["caddy", "validate", "--config", "/etc/caddy/Caddyfile"], {cwd: process.cwd(),projectId: "na",stage: "deploy",captureOutput: true, writeLogs: false,});
             await runCommand("sudo", ["systemctl", "reload", "caddy"], {cwd: process.cwd(), projectId: "na", stage: "deploy", captureOutput: true, writeLogs: false, });
             console.log("Generated Caddyfile:\n", caddyFile)

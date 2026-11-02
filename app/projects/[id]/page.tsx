@@ -36,10 +36,11 @@ export default async function Page({
     const project = await db.query.projects.findFirst({ where: and(eq(projects.id, id), eq(projects.userId, session.user.id)), with: { deployments: true } })
 
     if (!project) return notFound()
-
+        console.log(session)
     return <>
         <div>
             Deployments
+            {/* {session.user.admin && <div>Admin</div>} */}
             {project?.deployments.map(deployment => (<div key={deployment.id}>
                 <h1>{deployment.id} - {deployment.status} - {new Date(deployment.createdAt).toLocaleString()}</h1>
                 

@@ -29,6 +29,34 @@
       "when": 1793579967231,
       "tag": "0003_silly_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793640122596,
+      "tag": "0004_youthful_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793640668170,
+      "tag": "0005_perfect_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793641253089,
+      "tag": "0006_common_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793641477524,
+      "tag": "0007_wide_aqueduct",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "deployments" ADD COLUMN "rollbacked" boolean DEFAULT false NOT NULL;
