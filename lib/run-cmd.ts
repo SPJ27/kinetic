@@ -1,4 +1,3 @@
-
 import { spawn } from "node:child_process";
 import { workerDb as db } from "@/db/worker";
 import { logs } from "@/db/schema/logs";
@@ -11,8 +10,7 @@ export type LogStage =
   | "install"
   | "test"
   | "healthcheck"
-  | "prune"
-  ;
+  | "prune";
 
 type LogStream = "stdout" | "stderr";
 
@@ -35,6 +33,7 @@ type RunCommandOptions = {
   timeoutMs?: number;
   captureOutput?: boolean;
   writeLogs?: boolean;
+  stdin?: string;
 };
 
 type PendingLog = {
@@ -76,6 +75,7 @@ export function runCommand(
     timeoutMs = DEFAULT_TIMEOUT_MS,
     captureOutput = false,
     writeLogs = true,
+    stdin,
   }: RunCommandOptions
 ): Promise<RunCommandResult> {
   return new Promise((resolve, reject) => {
@@ -90,7 +90,7 @@ export function runCommand(
       detached,
       stdio: detached
         ? "ignore"
-        : ["ignore", "pipe", "pipe"],
+        : [stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       env: childEnv as NodeJS.ProcessEnv,
     });
 
@@ -134,7 +134,6 @@ export function runCommand(
 
       return output;
     };
-
     let pendingLogs: PendingLog[] = [];
     let writeChain: Promise<void> = Promise.resolve();
     let logWriteFailed = false;
@@ -145,7 +144,7 @@ export function runCommand(
     const capturedStderr: string[] = [];
 
     function flushLogs() {
-        if (!writeLogs) return
+      if (!writeLogs) return;
       if (pendingLogs.length === 0) return;
 
       const batch = pendingLogs;
@@ -278,6 +277,10 @@ export function runCommand(
 
     const stdoutLines = createLineHandler("stdout");
     const stderrLines = createLineHandler("stderr");
+
+    if (stdin !== undefined) {
+      child.stdin?.end(stdin);
+    }
 
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");

@@ -14,6 +14,7 @@ import { deployments } from "@/db/schema/deployments";
 import { and, desc, eq } from "drizzle-orm";
 import { projects } from "@/db/schema/projects";
 import { pruneQueue } from "@/queue/prune.queue";
+import { caddyQueue } from "@/queue/caddy.queue";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -351,7 +352,7 @@ worker.on("completed", async (job, result) => {
                 prune the old deployments
                 and in project table, change the docker container id to the new ones and the port to that of new deployment
                 */
-               
+
         if (job.data.redeploy) {
             const { projectId, imageName, containerName } = job.data;
             const deploymentId = result?.deploymentId;
@@ -381,10 +382,12 @@ worker.on("completed", async (job, result) => {
                     await pruneQueue.add("prune-deployment", { deploymentId: deployment.id });
                 }
             }
-
             await db.update(projects).set({ dockerDeploymentId: deploymentId, port: result?.port }).where(eq(projects.id, projectId)).execute();
         }
-});
+        await caddyQueue.add("mount-caddy", {});
+        console.log("Redeployed successfully, old deployments are being pruned and caddy is being mounted");
+        console.log("-----------------")
+    });
 
 worker.on("failed", (job, err) => {
     db.update(deployments).set({ status: "failed", finishedAt: new Date() })

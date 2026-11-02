@@ -13,6 +13,7 @@ export async function createProject(formData: FormData) {
 
 
     const githubUrl = formData.get("githubUrl") as string;
+    const subdomain = formData.get("subdomain") as string || "kinetic";
     const env = formData.get("env") as object || {};
 
 
