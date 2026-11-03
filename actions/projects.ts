@@ -52,7 +52,7 @@ const projectName = githubUrl
 
     const job = await deploymentQueue.add(
         "deploy-from-github",
-        { githubUrl, projectName, env, deploymentId, imageName, containerName, projectId: created.id, redeploy: false },
+        { githubUrl, projectName, env, deploymentId, imageName, containerName, projectId: created.id, redeploy: false, userId: session.user.id },
         {
             attempts: 1,
             backoff: {

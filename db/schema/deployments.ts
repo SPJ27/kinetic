@@ -17,6 +17,7 @@ export const deployments = pgTable(
     type: text("type").notNull().default("deployment"),
     startedAt: timestamp("started_at"),
     finishedAt: timestamp("finished_at"),
+    commit: text("commit"),
   },
   (table) => [
     index("deployments_project_id_idx").on(table.projectId),

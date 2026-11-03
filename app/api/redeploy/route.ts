@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { auth } from "@/lib/auth/auth";
+import { requireSession } from "@/lib/require-session";
 import { deploymentQueue } from "@/queue/deployments.queue";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
     // add another param called redeploy to job body
     // if successful, prune the previous deployment
 
-    
+    const session = await requireSession()
     const {projectId, env} = await request.json();
     
     const project = await db.query.projects.findFirst({
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
 
     const job = await deploymentQueue.add(
             "deploy-from-github",
-            { githubUrl, projectName: project.name,projectId, env, deploymentId, imageName, containerName, redeploy: true },
+            { githubUrl, projectName: project.name,projectId, env, deploymentId, imageName, containerName, redeploy: true, userId: session.user.id },
             {
                 attempts: 1,
                 backoff: {
@@ -40,5 +41,5 @@ export async function POST(request: Request) {
                 removeOnFail: 500,
             }
         ); 
-
+        return NextResponse.json({ message: "Redeployment job added to queue", jobId: job.id }, { status: 200 });
 }

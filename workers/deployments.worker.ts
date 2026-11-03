@@ -1,405 +1,481 @@
-import { Worker } from "bullmq";
-import "dotenv/config";
-import { runCommand, type LogStage } from "@/lib/run-cmd";
-import {
-    parseUserEnv,
-    toDockerEnvFile,
-    toShellEnvFile,
-} from "@/lib/deploy-env";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { db } from "@/db";
-import { deployments } from "@/db/schema/deployments";
-import { and, desc, eq } from "drizzle-orm";
-import { projects } from "@/db/schema/projects";
-import { pruneQueue } from "@/queue/prune.queue";
-import { caddyQueue } from "@/queue/caddy.queue";
+    import { Worker } from "bullmq";
+    import "dotenv/config";
+    import { runCommand, type LogStage } from "@/lib/run-cmd";
+    import {
+        parseUserEnv,
+        toDockerEnvFile,
+        toShellEnvFile,
+    } from "@/lib/deploy-env";
+    import { mkdtemp, rm, writeFile } from "node:fs/promises";
+    import os from "node:os";
+    import path from "node:path";
+    import { db } from "@/db";
+    import { deployments } from "@/db/schema/deployments";
+    import { and, desc, eq } from "drizzle-orm";
+    import { projects } from "@/db/schema/projects";
+    import { pruneQueue } from "@/queue/prune.queue";
+    import { caddyQueue } from "@/queue/caddy.queue";
+    import { auth } from "@/lib/auth/auth";
+    import { account } from "@/db/schema";
+import { getLatestCommit } from "@/lib/github";
 
-const APPS_DIR = path.resolve("./applications");
-const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
-const MIN_PORT = 1024;
-const MAX_PORT = 65535;
+    const APPS_DIR = path.resolve("./applications");
+    const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
+    const MIN_PORT = 1024;
+    const MAX_PORT = 65535;
 
-const MEMORY_LIMIT = "1g";
-const CPU_LIMIT = "1";
-const PIDS_LIMIT = "256";
+    const MEMORY_LIMIT = "1g";
+    const CPU_LIMIT = "1";
+    const PIDS_LIMIT = "256";
 
-const dockerFile = `
-FROM node:22-alpine AS deps
+    const dockerFile = `
+    FROM node:22-alpine AS deps
 
-WORKDIR /app
+    WORKDIR /app
 
-COPY package.json package-lock.json ./
+    COPY package.json package-lock.json ./
 
-RUN npm ci
+    RUN npm ci
 
-FROM node:22-alpine AS builder
+    FROM node:22-alpine AS builder
 
-WORKDIR /app
+    WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+    COPY --from=deps /app/node_modules ./node_modules
+    COPY . .
 
-ENV NEXT_TELEMETRY_DISABLED=1
+    ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN --mount=type=secret,id=build_env set -a && . /run/secrets/build_env && set +a && npm run build
+    RUN --mount=type=secret,id=build_env set -a && . /run/secrets/build_env && set +a && npm run build
 
-FROM node:22-alpine AS runner
+    FROM node:22-alpine AS runner
 
-WORKDIR /app
+    WORKDIR /app
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
+    ENV NODE_ENV=production
+    ENV NEXT_TELEMETRY_DISABLED=1
+    ENV HOSTNAME=0.0.0.0
+    ENV PORT=3000
 
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+    RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+    COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+    COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+    COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+    COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-USER nextjs
+    USER nextjs
 
-EXPOSE 3000
+    EXPOSE 3000
 
-CMD ["npm", "start"]
-`;
+    CMD ["npm", "start"]
+    `;
 
-const dockerIgnore = `
-node_modules
-.next
-.git
-.env
-.env.*
-!.env.example
-npm-debug.log*
-Dockerfile*
-.dockerignore
-`;
+    const dockerIgnore = `
+    node_modules
+    .next
+    .git
+    .env
+    .env.*
+    !.env.example
+    npm-debug.log*
+    Dockerfile*
+    .dockerignore
+    `;
 
-function validateGithubUrl(raw: unknown): string {
-    const invalid = new Error("Invalid GitHub repository URL");
+    function validateGithubUrl(raw: unknown): string {
+        const invalid = new Error("Invalid GitHub repository URL");
 
-    if (typeof raw !== "string") {
-        throw invalid;
-    }
-
-    let url: URL;
-
-    try {
-        url = new URL(raw);
-    } catch {
-        throw invalid;
-    }
-
-    if (
-        url.protocol !== "https:" ||
-        url.hostname !== "github.com" ||
-        url.port ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash ||
-        !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)
-    ) {
-        throw invalid;
-    }
-
-    return url.href;
-}
-
-function validateProjectName(raw: unknown): string {
-    if (typeof raw !== "string" || !PROJECT_NAME_RE.test(raw)) {
-        throw new Error("Invalid project name");
-    }
-
-    return raw;
-}
-
-function validatePort(raw: unknown): number {
-    const port =
-        typeof raw === "number"
-            ? raw
-            : typeof raw === "string"
-                ? Number(raw)
-                : NaN;
-
-    if (
-        !Number.isInteger(port) ||
-        port < MIN_PORT ||
-        port > MAX_PORT
-    ) {
-        throw new Error("Invalid project port");
-    }
-
-    return port;
-}
-
-const worker = new Worker(
-    "deployments",
-    async (job) => {
-        if (job.name !== "deploy-from-github") {
-            return;
+        if (typeof raw !== "string") {
+            throw invalid;
         }
 
-        const githubUrl = validateGithubUrl(job.data.githubUrl);
-        const envVars = parseUserEnv(job.data.env);
-        const secretValues = envVars.map(([, value]) => value);
-
-        const {projectId, deploymentId, imageName, containerName, redeploy } = job.data;
-        console.log(projectId, deploymentId, imageName, containerName)
-        if (
-            typeof imageName !== "string" ||
-            typeof containerName !== "string" ||
-            typeof projectId !== "string"
-        ) {
-            throw new Error("Invalid deployment data");
-        }
-       
-        const [deployment] = await db
-            .insert(deployments)
-            .values({
-                projectId,
-                dockerDeploymentId: deploymentId,
-                status: "building",
-            })
-            .returning()
-
-        if (!deployment) {
-            throw new Error("Failed to create deployment record")
-        }
-        console.log(`Created deployment record with ID: ${deployment.id}`)
-        const port = validatePort(deployment.port)
-        const repoPath = path.resolve(APPS_DIR, deploymentId);
-
-        const envDir = await mkdtemp(
-            path.join(os.tmpdir(), "deploy-env-")
-        );
-
-        const runtimeEnvPath = path.join(envDir, "runtime.env");
-        const buildEnvPath = path.join(envDir, "build.env");
-
-        const redact = [
-            ...secretValues,
-            imageName,
-            containerName,
-            deploymentId,
-            envDir,
-            APPS_DIR,
-            process.cwd(),
-        ];
-
-        const run = (
-            command: string,
-            args: string[],
-            cwd: string,
-            stage: LogStage,
-            env: Record<string, string | undefined> = {}
-        ) =>
-            runCommand(command, args, {
-                cwd,
-                projectId,
-                env,
-                redact,
-                stage,
-            });
+        let url: URL;
 
         try {
-            await run(
-                "git",
-                [
-                    "clone",
-                    "--depth",
-                    "1",
-                    "--progress",
-                    "--",
-                    githubUrl,
-                    deploymentId,
-                ],
-                APPS_DIR,
-                "deploy",
-                { GIT_TERMINAL_PROMPT: "0" }
-            );
+            url = new URL(raw);
+        } catch {
+            throw invalid;
+        }
 
-            await writeFile(
-                path.join(repoPath, "Dockerfile"),
-                dockerFile
-            );
+        if (
+            url.protocol !== "https:" ||
+            url.hostname !== "github.com" ||
+            url.port ||
+            url.username ||
+            url.password ||
+            url.search ||
+            url.hash ||
+            !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)
+        ) {
+            throw invalid;
+        }
 
-            await writeFile(
-                path.join(repoPath, ".dockerignore"),
-                dockerIgnore
-            );
+        return url.href;
+    }
 
-            await writeFile(
-                runtimeEnvPath,
-                toDockerEnvFile(envVars),
-                { mode: 0o600 }
-            );
+    function validateProjectName(raw: unknown): string {
+        if (typeof raw !== "string" || !PROJECT_NAME_RE.test(raw)) {
+            throw new Error("Invalid project name");
+        }
 
-            await writeFile(
-                buildEnvPath,
-                toShellEnvFile(envVars),
-                { mode: 0o600 }
-            );
+        return raw;
+    }
 
-            await run(
-                "docker",
-                [
-                    "build",
-                    "--progress=plain",
-                    "--secret",
-                    `id=build_env,src=${buildEnvPath}`,
-                    "-t",
-                    imageName,
-                    ".",
-                ],
-                repoPath,
-                "build",
-                { DOCKER_BUILDKIT: "1" }
-            );
+    function validatePort(raw: unknown): number {
+        const port =
+            typeof raw === "number"
+                ? raw
+                : typeof raw === "string"
+                    ? Number(raw)
+                    : NaN;
 
-            await run(
-                "docker",
-                [
-                    "run",
-                    "-d",
-                    "--name",
-                    containerName,
-                    "--restart",
-                    "unless-stopped",
-                    "--env-file",
-                    runtimeEnvPath,
-                    "-e",
-                    "NODE_ENV=production",
-                    "-e",
-                    "PORT=3000",
-                    "-e",
-                    "HOSTNAME=0.0.0.0",
-                    "--memory",
-                    MEMORY_LIMIT,
-                    "--cpus",
-                    CPU_LIMIT,
-                    "--pids-limit",
-                    PIDS_LIMIT,
-                    "--cap-drop",
-                    "ALL",
-                    "--security-opt",
-                    "no-new-privileges",
-                    "--log-opt",
-                    "max-size=10m",
-                    "--log-opt",
-                    "max-file=3",
-                    "-p",
-                    `127.0.0.1:${port}:3000`,
-                    imageName,
-                ],
-                repoPath,
-                "deploy"
-            );
+        if (
+            !Number.isInteger(port) ||
+            port < MIN_PORT ||
+            port > MAX_PORT
+        ) {
+            throw new Error("Invalid project port");
+        }
 
-            console.log(
-                `Deployment ${deployment.id} is now running on port ${port}`
-            );
-            return {
-                success: true,
-                deploymentRowId: deployment.id,
-                githubUrl,
+        return port;
+    }
+
+    const worker = new Worker(
+        "deployments",
+        async (job) => {
+            if (job.name !== "deploy-from-github") {
+                return;
+            }
+
+            const githubUrl = validateGithubUrl(job.data.githubUrl);
+            const envVars = parseUserEnv(job.data.env);
+            const secretValues = envVars.map(([, value]) => value);
+
+            const {
                 projectId,
                 deploymentId,
                 imageName,
                 containerName,
-                port,
-            };
-        } finally {
-            await rm(envDir, {
-                recursive: true,
-                force: true,
+                userId,
+            } = job.data;
+            console.log(userId)
+            if (
+                typeof imageName !== "string" ||
+                typeof containerName !== "string" ||
+                typeof projectId !== "string" 
+            ) {
+                throw new Error("Invalid deployment data");
+            }
+
+            const githubAccount = await db.query.account.findFirst({
+                where: and(
+                    eq(account.userId, userId),
+                    eq(account.providerId, "github")
+                ),
             });
-        }
-    },
-    {
-        connection: {
-            host: process.env.REDIS_HOST ?? "127.0.0.1",
-            port: Number(process.env.REDIS_PORT ?? 6379),
-            maxRetriesPerRequest: null,
+
+            if (!githubAccount) {
+                throw new Error("GitHub account is not connected");
+            }
+
+            const tokenResult = await auth.api.getAccessToken({
+                body: {
+                    accountId: githubAccount.id,
+                    userId,
+                },
+            });
+
+            const accessToken = tokenResult.accessToken;
+
+            if (!accessToken) {
+                throw new Error("Could not retrieve GitHub access token");
+            }
+
+            const authHeader = Buffer.from(
+                `x-access-token:${accessToken}`
+            ).toString("base64");
+            const {sha, shortSha} = await getLatestCommit(githubUrl, accessToken);
+
+            const [deployment] = await db
+                .insert(deployments)
+                .values({
+                    projectId,
+                    dockerDeploymentId: deploymentId,
+                    status: "building",
+                    commit: shortSha
+                })
+                .returning();
+
+            if (!deployment) {
+                throw new Error("Failed to create deployment record");
+            }
+
+            console.log(`Created deployment record with ID: ${deployment.id}`);
+
+            const port = validatePort(deployment.port);
+            const repoPath = path.resolve(APPS_DIR, deploymentId);
+
+            const envDir = await mkdtemp(
+                path.join(os.tmpdir(), "deploy-env-")
+            );
+
+            const runtimeEnvPath = path.join(envDir, "runtime.env");
+            const buildEnvPath = path.join(envDir, "build.env");
+
+
+            const redact = [
+                ...secretValues,
+                accessToken,
+                authHeader,
+                imageName,
+                containerName,
+                deploymentId,
+                envDir,
+                APPS_DIR,
+                process.cwd(),
+            ];
+
+            const run = (
+                command: string,
+                args: string[],
+                cwd: string,
+                stage: LogStage,
+                env: Record<string, string | undefined> = {}
+            ) =>
+                runCommand(command, args, {
+                    cwd,
+                    projectId,
+                    env,
+                    redact,
+                    stage,
+                });
+
+            try {
+                await run(
+                    "git",
+                    [
+                        "clone",
+                        "--depth",
+                        "1",
+                        "--progress",
+                        "--",
+                        githubUrl,
+                        deploymentId,
+                    ],
+                    APPS_DIR,
+                    "deploy",
+                    {
+                        GIT_TERMINAL_PROMPT: "0",
+                        GIT_CONFIG_COUNT: "1",
+                        GIT_CONFIG_KEY_0:
+                            "http.https://github.com/.extraheader",
+                        GIT_CONFIG_VALUE_0:
+                            `AUTHORIZATION: basic ${authHeader}`,
+                    }
+                );
+                
+                await writeFile(
+                    path.join(repoPath, "Dockerfile"),
+                    dockerFile
+                );
+
+                await writeFile(
+                    path.join(repoPath, ".dockerignore"),
+                    dockerIgnore
+                );
+
+                await writeFile(
+                    runtimeEnvPath,
+                    toDockerEnvFile(envVars),
+                    { mode: 0o600 }
+                );
+
+                await writeFile(
+                    buildEnvPath,
+                    toShellEnvFile(envVars),
+                    { mode: 0o600 }
+                );
+
+                await run(
+                    "docker",
+                    [
+                        "build",
+                        "--progress=plain",
+                        "--secret",
+                        `id=build_env,src=${buildEnvPath}`,
+                        "-t",
+                        imageName,
+                        ".",
+                    ],
+                    repoPath,
+                    "build",
+                    { DOCKER_BUILDKIT: "1" }
+                );
+
+                await run(
+                    "docker",
+                    [
+                        "run",
+                        "-d",
+                        "--name",
+                        containerName,
+                        "--restart",
+                        "unless-stopped",
+                        "--env-file",
+                        runtimeEnvPath,
+                        "-e",
+                        "NODE_ENV=production",
+                        "-e",
+                        "PORT=3000",
+                        "-e",
+                        "HOSTNAME=0.0.0.0",
+                        "--memory",
+                        MEMORY_LIMIT,
+                        "--cpus",
+                        CPU_LIMIT,
+                        "--pids-limit",
+                        PIDS_LIMIT,
+                        "--cap-drop",
+                        "ALL",
+                        "--security-opt",
+                        "no-new-privileges",
+                        "--log-opt",
+                        "max-size=10m",
+                        "--log-opt",
+                        "max-file=3",
+                        "-p",
+                        `127.0.0.1:${port}:3000`,
+                        imageName,
+                    ],
+                    repoPath,
+                    "deploy"
+                );
+
+                console.log(
+                    `Deployment ${deployment.id} is now running on port ${port}`
+                );
+
+                return {
+                    success: true,
+                    deploymentRowId: deployment.id,
+                    githubUrl,
+                    projectId,
+                    deploymentId,
+                    imageName,
+                    containerName,
+                    port,
+                };
+            } finally {
+                await rm(envDir, {
+                    recursive: true,
+                    force: true,
+                });
+            }
         },
-    }
-);
+        {
+            connection: {
+                host: process.env.REDIS_HOST ?? "127.0.0.1",
+                port: Number(process.env.REDIS_PORT ?? 6379),
+                maxRetriesPerRequest: null,
+            },
+        }
+    );
 
-worker.on("completed", async (job, result) => {
+    worker.on("completed", async (job, result) => {
+        await db
+            .update(deployments)
+            .set({ status: "active", finishedAt: new Date() })
+            .where(eq(deployments.id, result?.deploymentRowId))
+            .execute();
 
-            await db
-                .update(deployments)
-                .set({ status: "active", finishedAt: new Date() })
-                .where(eq(deployments.id, result?.deploymentRowId))
-                .execute();
-
-            await db
+        await db
             .update(projects)
-            .set({ dockerDeploymentId: result?.deploymentId, port: result?.port })
+            .set({
+                dockerDeploymentId: result?.deploymentId,
+                port: result?.port,
+            })
             .where(eq(projects.id, result?.projectId))
             .execute();
 
-        console.log(`Deployment Job ${job.id} completed successfully.\n------------------`);
-
-                /*
-                if it is a redploy event, 
-                then if the task is succeeded
-                prune the old deployments
-                and in project table, change the docker container id to the new ones and the port to that of new deployment
-                */
+        console.log(
+            `Deployment Job ${job.id} completed successfully.\n------------------`
+        );
 
         if (job.data.redeploy) {
             const { projectId, imageName, containerName } = job.data;
             const deploymentId = result?.deploymentId;
+
             const project = await db.query.projects.findFirst({
                 where: and(eq(projects.id, projectId)),
                 with: {
                     deployments: {
                         orderBy: (deployment) => desc(deployment.createdAt),
-                     
                     },
                 },
             });
 
-
             console.log(`Project ${projectId} found: ${project?.name}`);
+
             if (!project) {
                 console.error(`Project ${projectId} not found`);
                 return;
             }
 
-
             for (const deployment of project.deployments) {
-            console.log(`Deployment ${deployment.id} found: ${imageName}, ${containerName}`);
+                console.log(
+                    `Deployment ${deployment.id} found: ${imageName}, ${containerName}`
+                );
 
-                if (deployment.dockerDeploymentId !== deploymentId && deployment.status === "active") {
-                    console.log(`Pruning old deployment ${deployment.dockerDeploymentId} for project ${project.name}`);
-                    await pruneQueue.add("prune-deployment", { deploymentId: deployment.id });
+                if (
+                    deployment.dockerDeploymentId !== deploymentId &&
+                    deployment.status === "active"
+                ) {
+                    console.log(
+                        `Pruning old deployment ${deployment.dockerDeploymentId} for project ${project.name}`
+                    );
+
+                    await pruneQueue.add("prune-deployment", {
+                        deploymentId: deployment.id,
+                    });
                 }
             }
-            await db.update(projects).set({ dockerDeploymentId: deploymentId, port: result?.port }).where(eq(projects.id, projectId)).execute();
+
+            await db
+                .update(projects)
+                .set({
+                    dockerDeploymentId: deploymentId,
+                    port: result?.port,
+                })
+                .where(eq(projects.id, projectId))
+                .execute();
+
+            console.log(
+                "Redeployed successfully, old deployments are being pruned and caddy is being mounted"
+            );
+            console.log("-----------------");
         }
+
         await caddyQueue.add("mount-caddy", {});
-        console.log("Redeployed successfully, old deployments are being pruned and caddy is being mounted");
-        console.log("-----------------")
     });
 
-worker.on("failed", (job, err) => {
-    db.update(deployments).set({ status: "failed", finishedAt: new Date() })
-        .where(eq(deployments.dockerDeploymentId, job?.data.deploymentId))
-        .execute()
-        .then(() => {
-            console.error(`Deployment Job ${job?.id} failed with error: ${err.message}`);
-        })
-        .catch((updateErr) => {
-            console.error(`Failed to update deployment status for Job ${job?.id}: ${updateErr.message}`);
-        });
+    worker.on("failed", (job, err) => {
+        db.update(deployments)
+            .set({ status: "failed", finishedAt: new Date() })
+            .where(eq(deployments.dockerDeploymentId, job?.data.deploymentId))
+            .execute()
+            .then(() => {
+                console.error(
+                    `Deployment Job ${job?.id} failed with error: ${err.message}`
+                );
+            })
+            .catch((updateErr) => {
+                console.error(
+                    `Failed to update deployment status for Job ${job?.id}: ${updateErr.message}`
+                );
+            });
 
-    // if redeploy, dont do anything
-    console.error(`Deployment Job ${job?.id} failed with error: ${err.message}`);
-});
+        console.error(
+            `Deployment Job ${job?.id} failed with error: ${err.message}`
+        );
+    });

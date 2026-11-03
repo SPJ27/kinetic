@@ -3,14 +3,17 @@
 import Metrics from '@/components/metrics'
 import Navbar from '@/components/navbar'
 import { authClient } from '@/lib/auth/auth-client'
+import { Inter } from 'next/font/google'
+
+const inter = Inter({ subsets: ['latin'] })
 
 const page = () => {
   const { data: session, isPending } = authClient.useSession()
 
+
   if (isPending) {
     return <div className="p-6 text-sm text-neutral-500">Loading...</div>
   }
-  console.log(session)
   if (!session) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -28,6 +31,7 @@ const page = () => {
       </div>
     )
   }
+
 
  const cpuHistory = [
   { time: '00:00', usage: 12 },
@@ -99,15 +103,25 @@ const stats = [
     data: diskHistory,
   }
 ]
-
+  const admin = session.user.role === 'admin'
   return (
     <div className="min-h-screen px-6 lg:px-40">
-      <Navbar image={session.user.image || ''} />
+      <Navbar image={session.user.image || ''} admin={admin} />
 
-      <div className="mt-6 grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      
         {stats.map((stat) => (
           <Metrics key={stat.title} {...stat} />
         ))}
+      </div>
+              <div className='text-[28px] tracking-lightest mt-6'>Projects</div>
+
+      <div className="mt-3 grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className='rounded-sm border border-neutral-200/30 bg-white p-5 shadow-sm  px-7 py-3'>
+          <h1 className='text-2xl font-bold'>dark-matter</h1>
+          <p className={`font-light text-xs text-neutral-400 ${inter.className}`}>dark-matter.app.sakshamjain.dev</p>
+
+        </div>
       </div>
     </div>
   )
