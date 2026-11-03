@@ -13,5 +13,7 @@ export const projects = pgTable("projects", {
   dockerDeploymentId: text("docker_deployment_id"),
   port: integer("port").notNull().default(4000),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  
+  status: text("status").notNull().default("active"),
+  commit: text("commit"),
+
 });
