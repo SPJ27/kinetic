@@ -1,13 +1,21 @@
 import { createProject } from '@/actions/projects'
 import { auth } from '@/lib/auth/auth'
+import { requireSession } from '@/lib/require-session'
 import { headers } from 'next/headers'
 import React from 'react'
 
 const page = async () => {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await requireSession()
   const admin = session?.user?.role === 'admin'
 
-  
+  if (admin) {
+    return (
+      <>
+      
+      </>
+    )
+  }
+
 
   return (
     <div className='w-full max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md'>
