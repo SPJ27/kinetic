@@ -1,7 +1,14 @@
 import { createProject } from '@/actions/projects'
+import { auth } from '@/lib/auth/auth'
+import { headers } from 'next/headers'
 import React from 'react'
 
-const page = () => {
+const page = async () => {
+  const session = await auth.api.getSession({ headers: await headers() })
+  const admin = session?.user?.role === 'admin'
+
+  
+
   return (
     <div className='w-full max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md'>
         <form className=' flex flex-col gap-1.5' action={createProject}>

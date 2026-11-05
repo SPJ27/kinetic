@@ -3,7 +3,7 @@ import React from 'react'
 
 const Navbar = ({image, admin}: {image: string; admin: boolean}) => {
   return (
-    <div className='w-full flex items-center justify-between py-4'>
+    <div className='w-full flex px-6 lg:px-40 items-center justify-between py-4'>
         <div className=''>
              <h1 className='text-4xl'>Kinetic.</h1>
         </div>
