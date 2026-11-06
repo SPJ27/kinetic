@@ -1,3 +1,5 @@
+import { getAccessToken } from "./access-token";
+
 export async function getLatestCommit(repoUrl: string, accessToken?: string) {
     const url = new URL(repoUrl);
     const match = url.pathname.match(
@@ -32,4 +34,22 @@ export async function getLatestCommit(repoUrl: string, accessToken?: string) {
         sha: latest.sha,
         shortSha: latest.sha.slice(0, 7)
     };
+}
+
+export async function getRepos() {
+    const { accessToken } = await getAccessToken();
+    const response = await fetch("https://api.github.com/user/repos?sort=pushed&direction=desc&per_page=100", {
+        headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${accessToken}`,
+        },
+    })
+    const repos = await response.json();
+    return repos.map((repo: any) => ({
+        name: repo.name,
+        fullName: repo.full_name,
+        url: repo.html_url,
+        pushedAt: repo.pushed_at
+    }));
+
 }

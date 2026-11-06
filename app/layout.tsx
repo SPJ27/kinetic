@@ -1,4 +1,4 @@
-import RealtimeProviders from "@/components/realtime-provider"
+
 import "./globals.css"
 import { Instrument_Serif } from "next/font/google"
 
@@ -11,7 +11,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={instrumentSerif.className}>
-        <RealtimeProviders>{children}</RealtimeProviders>
+        {children}
       </body>
     </html>
   )

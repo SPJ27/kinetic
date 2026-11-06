@@ -18,6 +18,7 @@ import { caddyQueue } from "@/queue/caddy.queue";
 import { auth } from "@/lib/auth/auth";
 import { account } from "@/db/schema";
 import { getLatestCommit } from "@/lib/github";
+import { getAccessToken } from "@/lib/access-token";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -169,33 +170,7 @@ const worker = new Worker(
             throw new Error("Invalid deployment data");
         }
 
-        const githubAccount = await db.query.account.findFirst({
-            where: and(
-                eq(account.userId, userId),
-                eq(account.providerId, "github")
-            ),
-        });
-
-        if (!githubAccount) {
-            throw new Error("GitHub account is not connected");
-        }
-
-        const tokenResult = await auth.api.getAccessToken({
-            body: {
-                accountId: githubAccount.id,
-                userId,
-            },
-        });
-
-        const accessToken = tokenResult.accessToken;
-
-        if (!accessToken) {
-            throw new Error("Could not retrieve GitHub access token");
-        }
-
-        const authHeader = Buffer.from(
-            `x-access-token:${accessToken}`
-        ).toString("base64");
+       const {accessToken, authHeader} = await getAccessToken();
 
         const { sha, shortSha } = await getLatestCommit(githubUrl, accessToken);
 
