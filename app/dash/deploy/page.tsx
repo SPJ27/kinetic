@@ -1,9 +1,8 @@
 import { createProject } from '@/actions/projects'
-import { auth } from '@/lib/auth/auth'
+
 import { getRepos } from '@/lib/github'
 import { requireSession } from '@/lib/require-session'
-import { headers } from 'next/headers'
-import React from 'react'
+
 import { FaGithub } from 'react-icons/fa'
 
 
@@ -24,7 +23,7 @@ const page = async () => {
             <div key={repo.url} className='bg-neutral-50 py-2 w-full border-y border-neutral-200/60 px-5'>
 
               <h1 className='flex items-center gap-1 text-xl tracking-wide'><FaGithub /> {repo.name}</h1>
-              <p className='text-xs tracking-wide text-neutral-400'>{repo.url}</p>
+              <p className='text-xs tracking-wider text-neutral-400'>{repo.url}</p>
             </div>
 
           )

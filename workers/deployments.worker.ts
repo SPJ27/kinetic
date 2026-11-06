@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import "dotenv/config";
-import { runCommand, type LogStage } from "@/lib/run-cmd";
+import { runCommand } from "@/lib/run-cmd";
 import {
     parseUserEnv,
     toDockerEnvFile,
