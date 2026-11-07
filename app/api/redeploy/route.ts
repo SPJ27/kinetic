@@ -12,8 +12,7 @@ export async function POST(request: Request) {
     // add another param called redeploy to job body
     // if successful, prune the previous deployment
 
-    const session = await requireSession()
-    const {projectId, env} = await request.json();
+    const {projectId, userId, env} = await request.json();
     
     const project = await db.query.projects.findFirst({
         where: eq(projects.id, projectId),
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
     const {githubUrl} = project
-
+    if (!githubUrl) return NextResponse.json({ error: "GitHub URL not found" }, { status: 404 });
     const deploymentId = crypto.randomUUID()
 
     const imageName = `deployment-${deploymentId}`;
@@ -30,7 +29,7 @@ export async function POST(request: Request) {
 
     const job = await deploymentQueue.add(
             "deploy-from-github",
-            { githubUrl, projectName: project.name,projectId, env, deploymentId, imageName, containerName, redeploy: true, userId: session.user.id },
+            { githubUrl, projectName: project.name,projectId, env, deploymentId, imageName, containerName, redeploy: true, userId },
             {
                 attempts: 1,
                 backoff: {
