@@ -38,7 +38,7 @@ const RepoSelector = ({ repos }: { repos: GithubProjects[] }) => {
                             </div>
                             <div className='flex flex-col gap-1'> 
                                 <label htmlFor="env" className='text-sm text-neutral-800'>Environment Variables</label>
-                                <textarea placeholder="DATABASE_URL=... " name="env" className='border text-xs text-neutral-600 px-2 py-0.5 border-neutral-200 modern font-mono '/>
+                                <textarea placeholder="DATABASE_URL=... " name="env" className='h-45 rounded-xs border text-xs text-neutral-600 px-2 py-0.5 border-neutral-200 modern font-mono '/>
                             </div>
 
                             <button type="submit" className='bg-neutral-900 w-[120px] text-white rounded-md hover:bg-neutral-800 py-0.5 tracking-wide'>Deploy</button>

@@ -7,6 +7,9 @@ import { encryptEnv } from "@/lib/encrypt";
 import { deploymentQueue } from "@/queue/deployments.queue";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { pruneQueue } from "@/queue/prune.queue";
+import { eq } from "drizzle-orm";
+import { refresh } from "next/cache";
 
 export async function createProject(formData: FormData) {
     const session = await auth.api.getSession({ headers: await headers() });
@@ -70,4 +73,30 @@ export async function createProject(formData: FormData) {
         }
     );
     redirect(`/projects/${created.id}`);
+}
+
+export async function deleteProject(projectId: string) {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return
+
+    const project = await db.query.projects.findFirst({
+        where: eq(projects.id, projectId),
+        with: {
+            deployments: true,
+        }
+    })
+
+    if (!project) {
+        throw new Error("Project not found");
+    }
+
+    if (project.userId !== session.user.id) {
+        throw new Error("You do not have permission to delete this project");
+    }
+
+    await db.update(projects).set({ status: "deleted" }).where(eq(projects.id, projectId));
+    for (const deployment of project.deployments) {
+        const job = await pruneQueue.add('prune-deployment', { deploymentId: deployment.id })
+    }
+    refresh()
 }

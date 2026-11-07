@@ -6,11 +6,12 @@ import { projects } from '@/db/schema'
 import { auth } from '@/lib/auth/auth'
 import Login from '@/components/login'
 import { headers } from 'next/headers'
-import { eq } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { Inter } from 'next/font/google'
 import { FaGithub } from 'react-icons/fa'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import DeleteProject from '@/components/delete-project'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -96,7 +97,7 @@ const page = async () => {
 
 
   const userProjects = await db.query.projects.findMany({
-    where: eq(projects.userId, session.user.id),
+    where: and(eq(projects.userId, session.user.id), ne(projects.status, 'deleted')),
     with: {
       deployments: true,
     },
@@ -117,17 +118,22 @@ const page = async () => {
         <Link href='/dash/deploy' className='rounded-sm bg-neutral-900 px-4 py-1 text-sm tracking-wide text-white hover:bg-neutral-800'>+ New</Link>
       </div>
 
-<div className="mt-3 grid w-full grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-3">
-          {userProjects.map((project) => (
+      <div className="mt-3 grid w-full grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-3">
+        {userProjects.map((project) => (
           <div key={project.id} className='transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-neutral-50/30 active:translate-y-0 active:scale-[0.99] hover:shadow-md hover:cursor-pointer rounded-sm border border-neutral-200/30 bg-white p-5 shadow-sm w-full  px-7 py-3'>
-            <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className={`font-light hover:underline underline-offset-2 text-xs text-neutral-400 ${inter.className} flex gap-1 items-center`}><FaGithub /> {project.githubUrl}</a>
+            <div className='flex justify-between'>
+              <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className={`font-light hover:underline underline-offset-2 text-xs text-neutral-400 ${inter.className} flex gap-1 items-center`}><FaGithub /> {project.githubUrl}</a>
+              <DeleteProject projectId={project.id} />
+            </div>
 
             <h1 className='text-[32px] font-bold mt-3 border-t border-neutral-100 pt-2'>{project.name}</h1>
             <p className={`font-light text-xs text-neutral-400 border-b border-neutral-100 pb-4 ${inter.className}`}>{project.subdomain}.app.sakshamjain.dev</p>
+            
             <div className={`font-light text-xs flex gap-1 items-center text-neutral-400 mt-2 ${inter.className}`}>
               {project.status === 'active' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />}
               {project.status === 'failed' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />}
               {project.status === 'pending' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-500" />}
+
               <span className='text-neutral-500 font-normal'>{project.commit?.substring(0, 7)}</span> • {project.deployments[0]?.createdAt && new Date(project.deployments[0]?.createdAt).toDateString()} {admin && `• Port ${project.port}`}</div>
           </div>
         ))}
