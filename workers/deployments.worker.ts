@@ -6,7 +6,7 @@ import {
     toDockerEnvFile,
     toShellEnvFile,
 } from "@/lib/deploy-env";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { db } from "@/db";
@@ -15,8 +15,6 @@ import { and, desc, eq } from "drizzle-orm";
 import { projects } from "@/db/schema/projects";
 import { pruneQueue } from "@/queue/prune.queue";
 import { caddyQueue } from "@/queue/caddy.queue";
-import { auth } from "@/lib/auth/auth";
-import { account } from "@/db/schema";
 import { getLatestCommit } from "@/lib/github";
 import { getAccessToken } from "@/lib/access-token";
 
@@ -170,7 +168,7 @@ const worker = new Worker(
             throw new Error("Invalid deployment data");
         }
 
-       const {accessToken, authHeader} = await getAccessToken();
+       const {accessToken, authHeader} = await getAccessToken({userId});
 
         const { sha, shortSha } = await getLatestCommit(githubUrl, accessToken);
 
@@ -226,7 +224,7 @@ const worker = new Worker(
                 redact,
                 stage,
             });
-
+        await mkdir(APPS_DIR, { recursive: true });
         try {
             await run(
                 "git",
@@ -439,21 +437,22 @@ worker.on("completed", async (job, result) => {
 });
 
 worker.on("failed", async (job, err) => {
-    await db
+    if (!job) return;
+
+    const [failedDeployment] = await db
         .update(deployments)
         .set({ status: "failed", finishedAt: new Date() })
-        .where(eq(deployments.dockerDeploymentId, job?.data.deploymentId))
-        .execute();
+        .where(eq(deployments.dockerDeploymentId, job.data.deploymentId))
+        .returning();
 
     await db
         .update(projects)
         .set({
             status: "failed",
+            ...(failedDeployment?.commit && { commit: failedDeployment.commit }),
         })
-        .where(eq(projects.id, job?.data.projectId))
+        .where(eq(projects.id, job.data.projectId))
         .execute();
 
-    console.error(
-        `Deployment Job ${job?.id} failed with error: ${err.message}`
-    );
+    console.error(`Deployment Job ${job.id} failed with error: ${err.message}`);
 });

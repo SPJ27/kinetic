@@ -2,15 +2,10 @@ import { db } from "@/db";
 import { auth } from "./auth/auth";
 import { account } from "@/db/schema/auth";
 import { and, eq } from "drizzle-orm";
-import { headers } from "next/headers";
 
-export async function getAccessToken() {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) {
-        throw new Error("User is not authenticated");
-    }
 
-    const userId = session.user.id;
+export async function getAccessToken({ userId }: { userId: string }) {
+
     const githubAccount = await db.query.account.findFirst({
         where: and(
             eq(account.userId, userId),

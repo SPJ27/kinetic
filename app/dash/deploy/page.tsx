@@ -3,33 +3,19 @@ import { createProject } from '@/actions/projects'
 import { getRepos } from '@/lib/github'
 import { requireSession } from '@/lib/require-session'
 
-import { FaGithub } from 'react-icons/fa'
-
+import RepoSelector from '@/components/repo-selector'
 
 
 const page = async () => {
   const session = await requireSession()
   const admin = session?.user?.role === 'admin'
 
+
   if (admin) {
     const repos = await getRepos()
     console.log(repos)
     return (
-      <div className='mx-auto px-6 lg:px-40 w-full'>
-        <p className='text-2xl' >Your Repositories</p>
-        <div className='max-w-xs w-full mt-3'>
-          {repos.slice(0, 6).map((repo: GithubProjects) =>
-          (
-            <div key={repo.url} className='bg-neutral-50 py-2 w-full border-y border-neutral-200/60 px-5'>
-
-              <h1 className='flex items-center gap-1 text-xl tracking-wide'><FaGithub /> {repo.name}</h1>
-              <p className='text-xs tracking-wider text-neutral-400'>{repo.url}</p>
-            </div>
-
-          )
-          )}
-        </div>
-      </div>
+      <RepoSelector repos={repos} />
     )
   }
 

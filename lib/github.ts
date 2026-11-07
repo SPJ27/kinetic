@@ -1,4 +1,6 @@
 import { getAccessToken } from "./access-token";
+import { headers } from "next/headers";
+import { requireSession } from "./require-session";
 
 export async function getLatestCommit(repoUrl: string, accessToken?: string) {
     const url = new URL(repoUrl);
@@ -37,7 +39,8 @@ export async function getLatestCommit(repoUrl: string, accessToken?: string) {
 }
 
 export async function getRepos() {
-    const { accessToken } = await getAccessToken();
+    const session = await requireSession();
+    const { accessToken } = await getAccessToken({userId: session.user.id});
     const response = await fetch("https://api.github.com/user/repos?sort=pushed&direction=desc&per_page=100", {
         headers: {
             Accept: "application/vnd.github+json",
