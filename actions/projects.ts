@@ -3,25 +3,26 @@
 import { db } from "@/db";
 import { projects } from "@/db/schema/projects";
 import { auth } from "@/lib/auth/auth";
+import { encryptEnv } from "@/lib/encrypt";
 import { deploymentQueue } from "@/queue/deployments.queue";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export async function createProject(formData: FormData) {
     const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return 
+    if (!session) return
 
 
     const githubUrl = formData.get("githubUrl") as string;
     const subdomain = formData.get("subdomain") as string || "kinetic";
-    const env = formData.get("env") as object || {};
+    const env = formData.get("env") as string || 'TEST_VALUE=123';
+    console.log({githubUrl, subdomain, env})
 
-
-const projectName = githubUrl
-  .replace(/\/+$/, '')
-  .split('/')
-  .pop()
-  ?.replace(/\.git$/, '')
+    const projectName = githubUrl
+        .replace(/\/+$/, '')
+        .split('/')
+        .pop()
+        ?.replace(/\.git$/, '')
 
 
     if (!projectName || !githubUrl) {
@@ -36,24 +37,28 @@ const projectName = githubUrl
     if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
         throw new Error("Valid project name required");
     }
-
+    const projectId = crypto.randomUUID();
     const deploymentId = crypto.randomUUID();
     const imageName = `deployment-${deploymentId}`;
     const containerName = `container-${deploymentId}`;
 
+    const encryptedEnv = encryptEnv(env, projectId)
+
     const [created] = await db.insert(projects).values({
+        id: projectId,
         name: projectName,
         githubUrl: githubUrl,
         dockerDeploymentId: deploymentId,
         userId: session.user.id,
         subdomain,
+        encryptedEnv,
     }).returning()
 
-    
+
 
     const job = await deploymentQueue.add(
         "deploy-from-github",
-        { githubUrl, projectName, env, deploymentId, imageName, containerName, projectId: created.id, redeploy: false, userId: session.user.id },
+        { githubUrl, projectName, deploymentId, imageName, containerName, projectId: created.id, redeploy: false, userId: session.user.id },
         {
             attempts: 1,
             backoff: {

@@ -36,6 +36,10 @@ const RepoSelector = ({ repos }: { repos: GithubProjects[] }) => {
                                 <input type="text" placeholder="Subdomain" name="subdomain" className='border px-2 py-0.5 border-neutral-200 ' value={subdomain} onChange={(e) => setSubdomain(e.target.value)} />
                                 <p className='text-xs text-neutral-400'>Your app will run at <span className='text-neutral-600 tracking-wide'>{subdomain}.app.sakshamjain.dev</span></p>
                             </div>
+                            <div className='flex flex-col gap-1'> 
+                                <label htmlFor="env" className='text-sm text-neutral-800'>Environment Variables</label>
+                                <textarea placeholder="DATABASE_URL=... " name="env" className='border text-xs text-neutral-600 px-2 py-0.5 border-neutral-200 modern font-mono '/>
+                            </div>
 
                             <button type="submit" className='bg-neutral-900 w-[120px] text-white rounded-md hover:bg-neutral-800 py-0.5 tracking-wide'>Deploy</button>
                         </form>

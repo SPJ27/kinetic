@@ -57,6 +57,13 @@
       "when": 1793641477524,
       "tag": "0007_wide_aqueduct",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794022377994,
+      "tag": "0008_powerful_shotgun",
+      "breakpoints": true
     }
   ]
 }

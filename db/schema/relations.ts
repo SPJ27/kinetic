@@ -33,6 +33,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   }),
   logs: many(logs),
   deployments: many(deployments),
+  metrics: many(logs),
 }))
 
 export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
@@ -41,4 +42,11 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
     references: [projects.id],
   }),
   logs: many(logs),
+}))
+
+export const metricsRelations = relations(logs, ({ one }) => ({
+  project: one(projects, {
+    fields: [logs.projectId],
+    references: [projects.id],
+  }),
 }))

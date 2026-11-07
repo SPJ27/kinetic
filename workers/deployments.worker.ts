@@ -17,6 +17,7 @@ import { pruneQueue } from "@/queue/prune.queue";
 import { caddyQueue } from "@/queue/caddy.queue";
 import { getLatestCommit } from "@/lib/github";
 import { getAccessToken } from "@/lib/access-token";
+import { decryptEnv } from "@/lib/encrypt";
 
 const APPS_DIR = path.resolve("./applications");
 const PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -148,8 +149,8 @@ const worker = new Worker(
         }
 
         const githubUrl = validateGithubUrl(job.data.githubUrl);
-        const envVars = parseUserEnv(job.data.env);
-        const secretValues = envVars.map(([, value]) => value);
+
+        
 
         const {
             projectId,
@@ -197,6 +198,27 @@ const worker = new Worker(
 
         const runtimeEnvPath = path.join(envDir, "runtime.env");
         const buildEnvPath = path.join(envDir, "build.env");
+
+        const project = await db.query.projects.findFirst({
+            where: eq(projects.id, projectId),
+        })
+
+        if (!project) {
+            throw new Error("Project not found");
+        }
+
+        const decryptedEnv = project?.encryptedEnv ? decryptEnv(project?.encryptedEnv ?? '', projectId) : '';
+        
+
+        const envVars = parseUserEnv(decryptedEnv.split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"))
+        .map((l) => {
+            const i = l.indexOf("=");
+            return { key: i < 1 ? "" : l.slice(0, i), value: l.slice(i + 1) };
+        }));
+        
+        const secretValues = envVars.map(([, value]) => value);
 
         const redact = [
             ...secretValues,

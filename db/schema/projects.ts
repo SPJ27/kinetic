@@ -15,5 +15,5 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   status: text("status").notNull().default("active"),
   commit: text("commit"),
-
+  encryptedEnv: text("encrypted_env").notNull().default(''),
 });
