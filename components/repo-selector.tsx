@@ -6,13 +6,23 @@ import { FaGithub } from 'react-icons/fa'
 const RepoSelector = ({ repos }: { repos: GithubProjects[] }) => {
     const [selectedRepo, setSelectedRepo] = useState<GithubProjects | null>(null);
     const [subdomain, setSubdomain] = useState<string>('');
+    const [filteredRepos, setFilteredRepos] = useState<GithubProjects[]>(repos);
+
+    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filtered = repos.filter(repo => repo.name.toLowerCase().includes(searchTerm));
+        setFilteredRepos(filtered);
+    }
     return (
         <div>
             <div className='mx-auto px-6 lg:px-40 w-full'>
                 <p className='text-2xl' >Your Repositories</p>
                 <div className='flex mt-3'>
-                    <div className='max-w-xs w-full mt-3'>
-                        {repos.slice(0, 6).map((repo: GithubProjects) =>
+                    
+                    <div className='max-w-sm  w-full mt-3'>
+             <input type="text" placeholder="Search repositories..." className='w-full mb-2 border px-2 py-0.5 border-neutral-200/60 bg-neutral-100/70 text-neutral-400 focus:outline-none rounded-xs' onChange={handleSearch} />
+<div className='overflow-y-auto max-h-[370px]'>
+                        {filteredRepos.map((repo: GithubProjects) =>
                         (
                             <div key={repo.url} onClick={() => {setSelectedRepo(repo); setSubdomain(repo.name)}} className={`${selectedRepo?.url === repo.url ? 'bg-neutral-200' : 'bg-neutral-50'} py-2 w-full border-y border-neutral-200/60 px-5`}>
 
@@ -22,9 +32,10 @@ const RepoSelector = ({ repos }: { repos: GithubProjects[] }) => {
 
                         )
                         )}
+                        </div>
                     </div>
-                    <div className='mt-3  w-full px-5 py-3'>
-                        <form className=' flex flex-col gap-4 max-w-xl' action={createProject}>
+                    <div className='w-full px-5 py-3'>
+                        <form className=' flex flex-col gap-4' action={createProject}>
                             {/* <h1 className='text-xl font-bold'>Deploy Your Project</h1> */}
                             <div className='flex flex-col gap-1'>
                                 <label htmlFor="githubUrl" className='text-sm text-neutral-800'>GitHub URL</label>

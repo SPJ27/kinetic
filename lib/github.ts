@@ -48,6 +48,7 @@ export async function getRepos() {
         },
     })
     const repos = await response.json();
+    console.log('repos', repos)
     return repos.map((repo: any) => ({
         name: repo.name,
         fullName: repo.full_name,

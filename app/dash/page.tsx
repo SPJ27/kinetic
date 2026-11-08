@@ -1,10 +1,8 @@
 
 import Metrics from '@/components/metrics'
-import Navbar from '@/components/navbar'
 import { db } from '@/db'
 import { projects } from '@/db/schema'
 import { auth } from '@/lib/auth/auth'
-import Login from '@/components/login'
 import { headers } from 'next/headers'
 import { and, eq, ne } from 'drizzle-orm'
 import { Inter } from 'next/font/google'
@@ -125,10 +123,10 @@ const page = async () => {
               <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className={`font-light hover:underline underline-offset-2 text-xs text-neutral-400 ${inter.className} flex gap-1 items-center`}><FaGithub /> {project.githubUrl}</a>
               <DeleteProject projectId={project.id} />
             </div>
-
+          <Link href={`/dash/projects/${project.id}`} className='flex flex-col'>
             <h1 className='text-[32px] font-bold mt-3 border-t border-neutral-100 pt-2'>{project.name}</h1>
             <p className={`font-light text-xs text-neutral-400 border-b border-neutral-100 pb-4 ${inter.className}`}>{project.subdomain}.app.sakshamjain.dev</p>
-            
+          </Link>
             <div className={`font-light text-xs flex gap-1 items-center text-neutral-400 mt-2 ${inter.className}`}>
               {project.status === 'active' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />}
               {project.status === 'failed' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />}
@@ -143,3 +141,8 @@ const page = async () => {
 }
 
 export default page
+
+export const metadata = {
+  title: 'Kinetic Dashboard',
+  description: 'Your projects and metrics',
+}

@@ -13,7 +13,7 @@ const page = async () => {
 
   if (admin) {
     const repos = await getRepos()
-    console.log(repos)
+    console.log('repos', repos)
     return (
       <RepoSelector repos={repos} />
     )
