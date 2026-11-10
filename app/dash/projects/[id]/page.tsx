@@ -1,15 +1,14 @@
 import { db } from "@/db"
-import { logs } from "@/db/schema/logs"
-import { eq, asc, sql, and } from "drizzle-orm"
-import { realtime } from "@/db/realtime"
-import ProjectLogs from "@/components/ballmac/project-logs"
-import { deployments, projects } from "@/db/schema"
+import { eq, and } from "drizzle-orm"
+import { projects } from "@/db/schema"
 import { notFound } from "next/navigation"
 import { auth } from "@/lib/auth/auth"
 import { headers } from "next/headers"
 import { Inter, Instrument_Serif } from "next/font/google"
-import Image from "next/image"
 import { duration } from "@/lib/time-taken"
+import DeleteProject from "@/components/delete-project"
+import Redeploy from "@/components/redeploy-project"
+import { decryptEnv } from "@/lib/encrypt"
 
 const inter = Inter({ subsets: ["latin"] })
 const instrumentSerif = Instrument_Serif({ subsets: ["latin"], weight: "400" })
@@ -60,39 +59,64 @@ export default async function Page({
     const dotStyle: Record<string, string> = {
         active: 'bg-emerald-500',
         failed: 'bg-red-500',
-        pending: 'bg-amber-500',
+        building: 'bg-amber-500',
     }
 
+    const latest = [...project.deployments].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+    const liveHost = `${project.subdomain}.app.sakshamjain.dev`
+
+    const fields = [
+        {
+            label: 'Repository',
+            value: (
+                <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-neutral-900">
+                    {project.githubUrl.replace('https://github.com/', '')} ↗
+                </a>
+            ),
+        },
+        {
+            label: 'Domain',
+            value: (
+                <a href={`https://${liveHost}`} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-neutral-900">
+                    {liveHost} ↗
+                </a>
+            ),
+        },
+        {
+            label: 'Commit',
+            value: <span className="font-mono">{project.commit?.substring(0, 7) ?? '-'}</span>,
+        },
+        {
+            label: 'Last deployed',
+            value: latest
+                ? new Date(latest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '-',
+        },
+        ...(admin ? [{ label: 'Port', value: <span className="font-mono">{project.port}</span> }] : []),
+    ]
+
     return (
-        <div className={`mx-auto w-full max-w-5xl px-6 py-10 ${inter.className}`}>
-            <a
-                href={project.githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs tracking-wide text-neutral-400 transition-colors hover:text-neutral-700"
-            >
-                {project.githubUrl.replace('https://github.com/', '')} ↗
-            </a>
-
-            <div className={`mt flex flex-wrap items-center gap-3 ${instrumentSerif.className}`}>
-                <h1 className="text-4xl font-semibold tracking-tight text-neutral-900">{project.name}</h1>
-            </div>
-
-
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-                {project.commit && (
-                    <span className="inline-flex items-center gap-1.5 rounded-sm bg-neutral-50 px-1.5 py-0.5 font-mono text-neutral-600">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotStyle[project.status] ?? 'bg-neutral-400'}`} />
-                        {project.commit.substring(0, 7)}
+        <div className={`mx-auto w-full max-w-6xl px-1 py-5 ${inter.className}`}>
+            <div className="mb-6 rounded-sm border border-neutral-200/80 bg-white">
+                <div className="flex flex-wrap items-center gap-3 px-4 py-4">
+                    <h1 className={`text-4xl tracking-tight text-neutral-900 ${instrumentSerif.className}`}>{project.name}</h1>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset ${statusStyle[project.status] ?? 'bg-neutral-50 text-neutral-600 ring-neutral-500/20'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${dotStyle[project.status] ?? 'bg-neutral-400'}`} />
+                        {project.status}
                     </span>
-                )}
-                {project.deployments[0]?.createdAt && (
-                    <span>Deployed {new Date(project.deployments[0].createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                )}
-                {admin && <span>Port {project.port}</span>}
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-neutral-100 px-4 py-3.5 sm:grid-cols-3 lg:grid-cols-5">
+                    {fields.map((f) => (
+                        <div key={f.label} className="min-w-0">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{f.label}</dt>
+                            <dd className="mt-1 truncate text-xs text-neutral-700">{f.value}</dd>
+                        </div>
+                    ))}
+                </dl>
             </div>
 
-            <div className="mt-8 divide-y divide-neutral-100 rounded-sm border border-neutral-200/80 bg-white">
+            <div className="mt-8 divide-y mb-6 divide-neutral-100 rounded-sm border border-neutral-200/80 bg-white">
                 <p className="px-4 py-3 text-sm font-medium text-neutral-900">Deployments</p>
                 {project.deployments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map((d) => (
                     <div key={d.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
@@ -106,6 +130,36 @@ export default async function Page({
                     </div>
                 ))}
             </div>
+
+
+
+            <div className="mt-8 divide-y mb-6 divide-neutral-100 rounded-sm border border-neutral-200/80 bg-white">
+                <p className="px-4 py-3 text-sm font-medium text-neutral-900">Domains</p>
+                {/* {project.deployments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map((d) => ( */}
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                        <span className="truncate font-mono text-xs text-neutral-500">api.app.sakshamjain.dev</span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-xs capitalize text-neutral-600">
+                            <span className={`h-1.5 w-1.5 rounded-full ${dotStyle['active'] ?? 'bg-neutral-400'}`} />
+                            active
+                        </span>
+                    </div>
+                {/* ))} */}
+            </div>
+
+
+
+            <label className="text-xs text-neutral-400 font-semibold">Environment Variables</label>
+
+
+
+            <textarea placeholder={'KEY=value\nDATABASE_URL=...'}
+                className="w-full rounded-sm border border-neutral-200/80 bg-white px-4 py-3 text-xs text-neutral-600 font-mono focus:outline-none"></textarea>
+
+            <div className="mt-6 gap-2 flex">
+                <DeleteProject projectId={project.id} />
+                <Redeploy projectId={project.id} />
+            </div>
+
         </div>
     )
 }

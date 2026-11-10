@@ -3,4 +3,5 @@ type GithubProjects = {
     fullName: string
     url: string
     pushedAt: string
+    private: boolean
 }

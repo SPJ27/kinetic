@@ -19,7 +19,7 @@ export async function createProject(formData: FormData) {
     const githubUrl = formData.get("githubUrl") as string;
     const subdomain = formData.get("subdomain") as string || "kinetic";
     const env = formData.get("env") as string || 'TEST_VALUE=123';
-    console.log({githubUrl, subdomain, env})
+    console.log({ githubUrl, subdomain, env })
 
     const projectName = githubUrl
         .replace(/\/+$/, '')
@@ -72,7 +72,7 @@ export async function createProject(formData: FormData) {
             removeOnFail: 500,
         }
     );
-    redirect(`/projects/${created.id}`);
+    redirect(`/dash/projects/${created.id}`);
 }
 
 export async function deleteProject(projectId: string) {
@@ -98,5 +98,38 @@ export async function deleteProject(projectId: string) {
     for (const deployment of project.deployments) {
         const job = await pruneQueue.add('prune-deployment', { deploymentId: deployment.id })
     }
+    refresh()
+}
+
+export async function redeployProject(projectId: string) {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return
+
+    const userId = session.user.id
+    const project = await db.query.projects.findFirst({
+        where: eq(projects.id, projectId),
+    });
+
+    if (!project) return
+
+    const { githubUrl } = project
+    const deploymentId = crypto.randomUUID()
+
+    const imageName = `deployment-${deploymentId}`;
+    const containerName = `container-${deploymentId}`;
+
+    const job = await deploymentQueue.add(
+        "deploy-from-github",
+        { githubUrl, projectName: project.name, projectId, deploymentId, imageName, containerName, redeploy: true, userId },
+        {
+            attempts: 1,
+            backoff: {
+                type: "exponential",
+                delay: 1000,
+            },
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        }
+    );
     refresh()
 }

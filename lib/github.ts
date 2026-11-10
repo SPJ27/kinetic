@@ -53,7 +53,8 @@ export async function getRepos() {
         name: repo.name,
         fullName: repo.full_name,
         url: repo.html_url,
-        pushedAt: repo.pushed_at
+        pushedAt: repo.pushed_at,
+        private: repo.private,
     }));
 
 }
