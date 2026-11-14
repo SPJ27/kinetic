@@ -3,6 +3,7 @@ import { account, session, user } from "./auth"
 import { projects } from "./projects"
 import { deployments } from "./deployments"
 import { logs } from "./logs"
+import { domains } from "./domains"
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -34,6 +35,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   logs: many(logs),
   deployments: many(deployments),
   metrics: many(logs),
+  domains: many(domains),
 }))
 
 export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
@@ -47,6 +49,13 @@ export const deploymentsRelations = relations(deployments, ({ one, many }) => ({
 export const metricsRelations = relations(logs, ({ one }) => ({
   project: one(projects, {
     fields: [logs.projectId],
+    references: [projects.id],
+  }),
+}))
+
+export const domainsRelations = relations(domains, ({ one }) => ({
+  project: one(projects, {
+    fields: [domains.projectId],
     references: [projects.id],
   }),
 }))

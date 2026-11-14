@@ -64,6 +64,13 @@
       "when": 1794022377994,
       "tag": "0008_powerful_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794630467839,
+      "tag": "0009_natural_red_hulk",
+      "breakpoints": true
     }
   ]
 }

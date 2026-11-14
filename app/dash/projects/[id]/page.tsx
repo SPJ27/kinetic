@@ -10,6 +10,8 @@ import Redeploy from "@/components/redeploy-project"
 import EnvTextArea from "@/components/project/env-textarea"
 import Domains from "@/components/project/domains"
 import Deployments from "@/components/project/deployments"
+import Link  from "next/link"
+import { LayoutDashboard, Rocket, Globe, KeyRound, Settings } from "lucide-react"
 
 const inter = Inter({ subsets: ["latin"] })
 const instrumentSerif = Instrument_Serif({ subsets: ["latin"], weight: "400" })
@@ -95,9 +97,41 @@ export default async function Page({
         },
         ...(admin ? [{ label: 'Port', value: <span className="font-mono">{project.port}</span> }] : []),
     ]
-
+    const items = [
+    { label: "Overview", path: "", icon: LayoutDashboard },
+    { label: "Deployments", path: "/deployments", icon: Rocket },
+    { label: "Domains", path: "/domains", icon: Globe },
+    { label: "Environment", path: "/env", icon: KeyRound },
+    { label: "Settings", path: "/settings", icon: Settings },
+]
     return (
-        <div className={`mx-auto w-full max-w-6xl px-1 py-5 ${inter.className}`}>
+        <div className={`mx-auto flex w-full max-w-6xl px-1 py-5 ${inter.className}`}>
+            <nav
+            aria-label="Project"
+            className="flex gap-1 overflow-x-auto border-b border-neutral-200/80 pb-2 md:sticky md:top-5 md:w-56 md:shrink-0 md:flex-col md:self-start md:overflow-visible md:border-b-0 md:pb-0"
+        >
+            {items.map(({ label, path, icon: Icon }) => {
+                const href = '/projects/'+`${project.id}` + path
+                const active = path === "/env"
+
+                return (
+                    <Link
+                        key={label}
+                        href={href}
+                        aria-current={active ? "page" : undefined}
+                        className={`flex shrink-0 items-center gap-2.5 rounded-sm px-3 py-2 text-sm transition-colors ${
+                            active
+                                ? "bg-neutral-900 font-medium text-white"
+                                : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                        }`}
+                    >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                    </Link>
+                )
+            })}
+        </nav>
+<div className="ml-6 w-full">
             <div className="mb-6 rounded-sm border border-neutral-200/80 bg-white">
                 <div className="flex flex-wrap items-center gap-3 px-4 py-4">
                     <h1 className={`text-4xl tracking-tight text-neutral-900 ${instrumentSerif.className}`}>{project.name}</h1>
@@ -134,7 +168,7 @@ export default async function Page({
                 <DeleteProject projectId={project.id} />
                 <Redeploy projectId={project.id} />
             </div>
-
+</div>
         </div>
     )
 }
