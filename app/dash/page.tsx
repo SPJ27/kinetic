@@ -121,7 +121,6 @@ const page = async () => {
           <div key={project.id} className='transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-neutral-50/30 active:translate-y-0 active:scale-[0.99] hover:shadow-md hover:cursor-pointer rounded-sm border border-neutral-200/30 bg-white p-5 shadow-sm w-full  px-7 py-3'>
             <div className='flex justify-between'>
               <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className={`font-light hover:underline underline-offset-2 text-xs text-neutral-400 ${inter.className} flex gap-1 items-center`}><FaGithub /> {project.githubUrl}</a>
-              <DeleteProject projectId={project.id} />
             </div>
           <Link href={`/dash/projects/${project.id}`} className='flex flex-col'>
             <h1 className='text-[32px] font-bold mt-3 border-t border-neutral-100 pt-2'>{project.name}</h1>

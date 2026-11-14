@@ -10,7 +10,6 @@ const page = async () => {
   const session = await requireSession()
   const admin = session?.user?.role === 'admin'
 
-
   if (admin) {
     const repos = await getRepos()
     console.log('repos', repos)
